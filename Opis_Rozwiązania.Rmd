@@ -1,0 +1,1169 @@
+---
+title: "Raport z realizacji zadania rekrutacyjnego"
+author: "PWR Racing Team"
+output:
+  pdf_document:
+    toc: true              
+    toc_depth: 3            
+    number_sections: true 
+    latex_engine: xelatex  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wstęp
+
+## Użyte narzędzia
+
+- **CLion** (JetBrains) – Środowisko programistyczne (IDE) wykorzystane do implementacji algorytmów i struktury danych w języku C++.
+- **RStudio** – Środowisko pracy z językiem R, służące do analizy danych pomiarowych oraz zarządzania dokumentacją projektu
+- **C++ (Standard C++)** – Język programowania użyty do implementacji wydajnych algorytmów redukcji przestrzennej (Spatial Hash, Greedy) oraz metod wyznaczania otoczki wypukłej (Graham Scan).
+- **CMake** – System automatyzacji budowania i zarządzania konfiguracją projektu C++.
+- **R Markdown & LaTeX (MiKTeX)** – Narzędzia do składu tekstu i automatycznego generowania sprawozdania technicznego w formacie PDF.
+- **Biblioteka ggplot2 (R)** – Narzędzie graficzne wykorzystane do tworzenia czytelnych wykresów diagnostycznych oraz wizualizacji porównawczych punktów.
+
+\newpage
+
+# Zadanie 1
+
+## Algorytm Zachłanny (Greedy Clustering)
+
+### Zasada działania algorytmu
+
+Algorytm opiera się na iteracyjnym łączeniu punktów, których odległość euklidesowa mieści się w zadanym progu odległości $threshold$ ($eps$). 
+
+Proces przebiega w następujących krokach:
+
+1. **Inicjalizacja:** Dla każdego punktu inicjalizowana jest lista jego oryginalnych identyfikatorów (`originalIds`), początkowo zawierająca wyłącznie jego własne `id`.
+
+2. **Pętla iteracyjna fuzji (`while`):** 
+   - W każdej iteracji przeszukiwana jest para nierozłączonych jeszcze punktów.
+   - Jeśli odległość między punktem bieżącym $current$ a jego sąsiadem $currentPoints[j]$ spełnia warunek bliskości:
+     $$\Delta x^2 + \Delta y^2 \leq threshold^2$$
+     punkty te kwalifikują się do fuzji.
+     
+3. **Średnia ważona pozycji:** Nowa pozycja połączonego klastra wyznaczana jest jako średnia ważona, uwzględniająca liczbę pierwotnych punktów składających się na oba klastry:
+   $$x_{new} = \frac{x_1 \cdot N_1 + x_2 \cdot N_2}{N_1 + N_2}$$
+   Zapewnia to stabilność pozycji centroidu i zapobiega „pływaniu” wykrytych obiektów.
+   
+4. **Scalanie identyfikatorów:** Listy oryginalnych ID obu obiektów są łączone w jedną, a sąsiad oznaczany jest jako pochłonięty (`merged[j] = true`).
+
+5. **Warunek stopu:** Pętla powtarza się dopóki w danej iteracji uda się dokonać jakiegokolwiek połączenia.
+
+### Złożoność obliczeniowa i optymalizacje
+
+Pod względem teoretycznym klasyczny algorytm zachłanny charakteryzuje się wysoką złożonością czasową:
+
+- **W najgorszym przypadku:** $\mathcal{O}(N^3)$ (wynikającą z wielokrotnego wykonywania przeszukiwań $N^2$ w pętli `while` aż do stabilizacji klastrów).
+
+- **W przestrzeni pamięciowej:** $\mathcal{O}(N)$ na przechowywanie struktur wektorowych.
+
+```{r visualization_greedy_smart_colors, echo = FALSE, warning = FALSE, message = FALSE, fig.width = 7, fig.height = 6}
+library(ggplot2)
+library(ggrepel)
+
+# --- 1. Bezpieczne wczytywanie danych oryginalnych ---
+orig_lines <- readLines("data/DaneDoZadan/zad1/example_input.txt")
+n_orig <- as.numeric(orig_lines[1])
+
+orig_list <- lapply(3:(2 + n_orig), function(i) {
+  parts <- as.numeric(strsplit(orig_lines[i], "\\s+")[[1]])
+  data.frame(id = parts[1], x = parts[2], y = parts[3])
+})
+original_data <- do.call(rbind, orig_list)
+
+# --- 2. Funkcja wczytująca plik wyjściowy dla Greedy ---
+read_new_output_custom <- function(filepath) {
+  if (!file.exists(filepath)) return(data.frame(id=integer(), x=numeric(), y=numeric(), n_merged=integer(), merged_str=character()))
+  
+  lines <- readLines(filepath)
+  lines <- lines[trimws(lines) != ""]
+  if (length(lines) <= 1) return(data.frame(id=integer(), x=numeric(), y=numeric(), n_merged=integer(), merged_str=character()))
+  
+  cones_list <- list()
+  
+  for (i in 2:length(lines)) {
+    parts <- as.numeric(strsplit(trimws(lines[i]), "\\s+")[[1]])
+    if (length(parts) < 4) next
+    
+    id       <- parts[1]
+    x        <- parts[2]
+    y        <- parts[3]
+    n_merged <- parts[4]
+    orig_ids <- parts[5:length(parts)]
+    
+    cones_list[[length(cones_list) + 1]] <- data.frame(
+      id = id,
+      x = x,
+      y = y,
+      n_merged = n_merged,
+      orig_ids_list = I(list(orig_ids)),
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  if (length(cones_list) == 0) {
+    return(data.frame(id=integer(), x=numeric(), y=numeric(), n_merged=integer()))
+  }
+  
+  do.call(rbind, cones_list)
+}
+
+# Wczytanie danych z pliku wynikowego Greedy
+greedy_data <- read_new_output_custom("output_greedy.txt")
+
+# --- 3. Przygotowanie podziału punktów oryginalnych ---
+merged_rows <- subset(greedy_data, n_merged > 1)
+merged_orig_ids <- unlist(merged_rows$orig_ids_list)
+
+# Podział na punkty wchłonięte (szare) i niezmienione (czarne)
+orig_merged_pts <- subset(original_data, id %in% merged_orig_ids)
+orig_single_pts <- subset(original_data, !id %in% merged_orig_ids)
+
+# --- 4. Funkcja rysująca z inteligentnym podziałem kolorów ---
+plot_greedy_smart <- function(reduced_df, orig_single, orig_merged, title_text) {
+  merged_pts <- subset(reduced_df, n_merged > 1)
+  
+  ggplot() +
+    # 1. Oryginalne punkty, które NIE zostały zredukowane -> CZARNE
+    geom_point(data = orig_single, aes(x = x, y = y), color = "black", size = 2, alpha = 0.8) +
+    geom_text_repel(
+      data = orig_single, aes(x = x, y = y, label = id),
+      size = 2.5, color = "black", box.padding = 0.2, point.padding = 0.2
+    ) +
+    
+    # 2. Oryginalne punkty, które ZOSTAŁY zredukowane -> SZARE w tle
+    geom_point(data = orig_merged, aes(x = x, y = y), color = "grey60", size = 2, alpha = 0.7) +
+    geom_text_repel(
+      data = orig_merged, aes(x = x, y = y, label = id),
+      size = 2, color = "grey50", box.padding = 0.1, point.padding = 0.1
+    ) +
+    
+    # 3. Nowe klastry (centroidy) -> RÓŻOWE na wierzchu
+    geom_point(data = merged_pts, aes(x = x, y = y), color = "#c51b7d", size = 4.5, alpha = 0.95) +
+    geom_text_repel(
+      data = merged_pts, aes(x = x, y = y, label = id),
+      size = 3, fontface = "bold", color = "#c51b7d", box.padding = 0.4, point.padding = 0.4
+    ) +
+    
+    theme_minimal() +
+    theme(legend.position = "none") +
+    labs(
+      title = title_text,
+      x = "X [m]",
+      y = "Y [m]"
+    ) +
+    coord_fixed()
+}
+
+# Wygenerowanie wykresu dla metody Greedy
+plot_greedy_smart(greedy_data, orig_single_pts, orig_merged_pts, "Redukcja: Metoda Zachłanna (Greedy)")
+```
+
+\newpage
+
+### Implementacja
+## Zaawansowana Redukcja Przestrzenna (Spatial Hashing z DSU)
+
+W celu przezwyciężenia ograniczeń wydajnościowych klasycznego algorytmu zachłannego, zaimplementowano wydajną metodę opartą na **siatce przestrzennej (*Spatial Hashing*)** oraz strukturze danych **Disjoint Set Union (DSU / Union-Find)**. Podejście to redukuje liczbę wymaganych porównań.
+
+### Zasada działania algorytmu
+
+Algorytm dzieli przestrzeń 2D na dyskretną siatkę kwadratową, w której bok każdej komórki odpowiada progowi odległości $\varepsilon$ (`eps`). 
+
+Proces przebiega w następujących krokach:
+
+1. **Przypisanie do siatki:** Dla każdego punktu wyznaczane są współrzędne komórki (`cx`, `cy`) przy użyciu funkcji podłogi:
+   $$cx = \lfloor x / \varepsilon \rfloor, \quad cy = \lfloor y / \varepsilon \rfloor$$
+   Punkty umieszczane są w słowniku haszującym (`std::unordered_map`), co pozwala na natychmiastowy dostęp do obiektów w danej strefie.
+   
+2. **Przeszukiwanie sąsiedztwa i DSU:** Dla każdej niepustej komórki algorytm sprawdza wyłącznie **9 sąsiadujących komórek** (wliczając ją samą). 
+
+3. **Warunek bliskości:** Dla par punktów z komórki bieżącej oraz sąsiedniej testowany jest warunek odległości z użyciem kwadratów (bez operacji pierwiastkowania):
+   $$\Delta x^2 + \Delta y^2 \leq \varepsilon^2$$
+   Jeśli warunek jest spełniony, wywoływana jest operacja **`unite`** struktury DSU, łącząca punkty w spójny klaster.
+   
+4. **Kompresja ścieżki:** Struktura DSU zarządza relacjami w czasie niemal stałym dzięki mechanizmowi kompresji ścieżki (`path compression`) w operacji `find`.
+
+5. **Grupowanie klastrów:** Po przetworzeniu siatki punkty są ostatecznie grupowane na podstawie wspólnego korzenia w DSU.
+
+### Wyznaczanie centroidów i finalnych identyfikatorów
+
+Po zakończeniu fazy fuzji dla każdego wyznaczonego klastra wykonywane są operacje końcowe:
+
+- **Centroid:** Pozycja nowego punktu wyliczana jest jako średnia arytmetyczna współrzędnych $x$ i $y$ wszystkich elementów należących do klastra.
+
+- **Zarządzanie identyfikatorami:** Oryginalne ID punktów składowych są zbierane i sortowane rosnąco.
+
+- Pojedyncze pachołki zachowują swoje pierwotne `id`, natomiast klastry powstałe z fuzji otrzymują nowe, sekwencyjne identyfikatory zaczynające się od wartości $maxOriginalId + 1$.
+
+### Złożoność obliczeniowa i optymalizacje
+
+Pod względem teoretycznym podejście to zapewnia drastyczną poprawę wydajności:
+
+- **W najgorszym przypadku:** $\mathcal{O}(N \cdot M)$ (gdzie $M$ to średnia liczba punktów w sąsiadujących komórkach, co w praktyce dla równomiernie rozłożonych pachołków daje złożoność bliską liniowej $\mathcal{O}(N)$).
+
+- **W przestrzeni pamięciowej:** $\mathcal{O}(N)$ na potrzeby struktury siatki oraz DSU.
+
+W kodzie C++ zastosowano dodatkowe optymalizacje niskopoziomowe:
+
+* **Użycie wspólnej funkcji kwadratu odległości (`calculateDistanceSquared`):** Całkowite wyeliminowanie kosztownych operacji `std::sqrt` i `std::pow` podczas testów sąsiedztwa w pętlach siatki.
+
+* **Wydajne kontenery STL:** Wykorzystanie `std::unordered_map` do szybkiego haszowania komórek przestrzennych.
+
+* **Bezpieczne przekazywanie danych:** Szerokie stosowanie stałych referencji (`const auto&`) eliminujących zbędne kopiowanie obiektów w pamięci.
+## Wyznaczanie Otoczki Wypukłej (Convex Hull)
+
+```{r visualization_spatial_smart_colors, echo = FALSE, warning = FALSE, message = FALSE, fig.width = 7, fig.height = 6}
+library(ggplot2)
+library(ggrepel)
+
+# --- 1. Bezpieczne wczytywanie danych oryginalnych ---
+orig_lines <- readLines("data/DaneDoZadan/zad1/example_input.txt")
+n_orig <- as.numeric(orig_lines[1])
+
+orig_list <- lapply(3:(2 + n_orig), function(i) {
+  parts <- as.numeric(strsplit(orig_lines[i], "\\s+")[[1]])
+  data.frame(id = parts[1], x = parts[2], y = parts[3])
+})
+original_data <- do.call(rbind, orig_list)
+
+# --- 2. Funkcja wczytująca plik wyjściowy ---
+read_new_output_custom <- function(filepath) {
+  if (!file.exists(filepath)) return(data.frame(id=integer(), x=numeric(), y=numeric(), n_merged=integer(), merged_str=character()))
+  
+  lines <- readLines(filepath)
+  lines <- lines[trimws(lines) != ""]
+  if (length(lines) <= 1) return(data.frame(id=integer(), x=numeric(), y=numeric(), n_merged=integer(), merged_str=character()))
+  
+  cones_list <- list()
+  
+  for (i in 2:length(lines)) {
+    parts <- as.numeric(strsplit(trimws(lines[i]), "\\s+")[[1]])
+    if (length(parts) < 4) next
+    
+    id       <- parts[1]
+    x        <- parts[2]
+    y        <- parts[3]
+    n_merged <- parts[4]
+    orig_ids <- parts[5:length(parts)]
+    
+    cones_list[[length(cones_list) + 1]] <- data.frame(
+      id = id,
+      x = x,
+      y = y,
+      n_merged = n_merged,
+      orig_ids_list = I(list(orig_ids)),
+      stringsAsFactors = FALSE
+    )
+  }
+  
+  if (length(cones_list) == 0) {
+    return(data.frame(id=integer(), x=numeric(), y=numeric(), n_merged=integer()))
+  }
+  
+  do.call(rbind, cones_list)
+}
+
+# Wczytanie danych (tutaj dla Spatial Hash, zmień na output_greedy.txt dla Greedy)
+spatial_data <- read_new_output_custom("output_spatial.txt")
+
+# --- 3. Przygotowanie podziału punktów oryginalnych ---
+merged_rows <- subset(spatial_data, n_merged > 1)
+merged_orig_ids <- unlist(merged_rows$orig_ids_list)
+
+# Podział na punkty wchłonięte (szare) i niezmienione (czarne)
+orig_merged_pts <- subset(original_data, id %in% merged_orig_ids)
+orig_single_pts <- subset(original_data, !id %in% merged_orig_ids)
+
+# --- 4. Funkcja rysująca z inteligentnym podziałem kolorów ---
+plot_spatial_smart <- function(reduced_df, orig_single, orig_merged, title_text) {
+  merged_pts <- subset(reduced_df, n_merged > 1)
+  
+  ggplot() +
+    # 1. Oryginalne punkty, które NIE zostały zredukowane -> CZARNE
+    geom_point(data = orig_single, aes(x = x, y = y), color = "black", size = 2, alpha = 0.8) +
+    geom_text_repel(
+      data = orig_single, aes(x = x, y = y, label = id),
+      size = 2.5, color = "black", box.padding = 0.2, point.padding = 0.2
+    ) +
+    
+    # 2. Oryginalne punkty, które ZOSTAŁY zredukowane -> SZARE w tle
+    geom_point(data = orig_merged, aes(x = x, y = y), color = "grey60", size = 2, alpha = 0.7) +
+    geom_text_repel(
+      data = orig_merged, aes(x = x, y = y, label = id),
+      size = 2, color = "grey50", box.padding = 0.1, point.padding = 0.1
+    ) +
+    
+    # 3. Nowe klastry (centroidy) -> RÓŻOWE na wierzchu
+    geom_point(data = merged_pts, aes(x = x, y = y), color = "#c51b7d", size = 4.5, alpha = 0.95) +
+    geom_text_repel(
+      data = merged_pts, aes(x = x, y = y, label = id),
+      size = 3, fontface = "bold", color = "#c51b7d", box.padding = 0.4, point.padding = 0.4
+    ) +
+    
+    theme_minimal() +
+    theme(legend.position = "none") +
+    labs(
+      title = title_text,
+      x = "X [m]",
+      y = "Y [m]"
+    ) +
+    coord_fixed()
+}
+
+# Wygenerowanie wykresu
+plot_spatial_smart(spatial_data, orig_single_pts, orig_merged_pts, "Redukcja: Spatial Hash")
+```
+
+\newpage
+
+### Implementacja
+## Wyznaczanie Otoczki Wypukłej (Monotone Chain (algorytm Andrew))
+
+### Zasada działania algorytmu
+
+Otoczka wypukła wyznacza najmniejszy wielokąt wypukły, który zawiera wszystkie zredukowane punkty (centroidy pachołków) w przestrzeni dwuwymiarowej. 
+
+Proces przebiega w następujących etapach:
+
+1. **Sortowanie punktów:** Zbiór wszystkich zredukowanych pachołków jest sortowany najpierw niemalejąco według współrzędnej $x$, a w przypadku jej równości – według współrzędnej $y$.
+
+2. **Budowa dolnej i górnej otoczki:** Algorytm iteracyjnie przetwarza posortowane punkty, budując najpierw otoczkę dolną, a następnie górną (zgodnie z metodą łańcucha monotonnego / *Monotone Chain*).
+
+3. **Test orientacji (iloczyn wektorowy):** W trakcie budowy konturu sprawdzany jest kierunek skrętu dla kolejnych trzech punktów za pomocą iloczynu wektorowego:
+
+   $$(p_2.x - p_1.x) \cdot (p_3.y - p_1.y) - (p_2.y - p_1.y) \cdot (p_3.x - p_1.x)$$
+   Jeśli orientacja nie spełnia warunku wypukłości (występuje skręt w „złą stronę”), poprzedni punkt jest usuwany z budowanej otoczki.
+   
+4. **Zamknięcie konturu:** Połączenie obu ścieżek tworzy spójną, uporządkowaną sekwencję wierzchołków definiujących zewnętrzną granicę rozmieszczenia pachołków.
+
+
+### Złożoność obliczeniowa i optymalizacje
+
+Pod względem teoretycznym proces wyznaczania otoczki charakteryzuje się bardzo korzystną efektywnością:
+
+- **W czasie:** $\mathcal{O}(N \log N)$, gdzie $N$ to liczba zredukowanych punktów (główny narzut wynika z początkowego sortowania współrzędnych).
+
+- **W przestrzeni pamięciowej:** $\mathcal{O}(N)$ na przechowywanie struktur wierzchołków tworzących wielokąt.
+
+\newpage
+
+### Implementacja
+## Wyznaczanie Otoczki Wypukłej (Graham's Scan)
+
+### Zasada działania algorytmu
+
+Otoczka wypukła wyznacza najmniejszy wielokąt wypukły, który zawiera wszystkie zredukowane punkty (centroidy pachołków) w przestrzeni dwuwymiarowej. 
+
+Proces przebiega w następujących etapach:
+
+1. **Wybór punktu bazowego (kotwicy):** Algorytm znajduje punkt wysunięty najdalej w dół (o najmniejszej współrzędnej $y$, a przy remisie najbardziej w lewo), który gwarantuje przynależność do otoczki, i ustanawia go punktem odniesienia.
+
+2. **Sortowanie kątowe (biegunowe):** Pozostałe punkty są sortowane rosnąco według kąta biegunowego względem kotwicy (przeciwnie do wskazówek zegara), z wykorzystaniem iloczynu wektorowego oraz kwadratów odległości w przypadku współliniowości.
+
+3. **Filtrowanie punktów współliniowych:** Z posortowanej listy eliminowane są punkty pośrednie leżące na tym samym promieniu od kotwicy, pozostawiając jedynie punkt najbardziej oddalony.
+
+4. **Skan Grahama i test orientacji (stos):** Algorytm wykorzystuje strukturę stosu, do której kolejno trafiają przefiltrowane punkty. Kierunek skrętu dla kolejnych trzech punktów weryfikowany jest za pomocą iloczynu wektorowego:
+   $$(p_2.x - p_1.x) \cdot (p_3.y - p_1.y) - (p_2.y - p_1.y) \cdot (p_3.x - p_1.x)$$
+   Jeśli orientacja nie spełnia warunku wypukłości (występuje skręt w „złą stronę” lub linia prosta), punkt ze szczytu stosu jest usuwany, aż do zachowania poprawnej struktury wielokąta.
+
+### Złożoność obliczeniowa i optymalizacje
+
+Pod względem teoretycznym proces wyznaczania otoczki charakteryzuje się bardzo korzystną efektywnością:
+
+- **W czasie:** $\mathcal{O}(N \log N)$, gdzie $N$ to liczba zredukowanych punktów (główny narzut wynika z początkowego sortowania kątowego punktów względem kotwicy).
+
+- **W przestrzeni pamięciowej:** $\mathcal{O}(N)$ na przechowywanie struktur wierzchołków, wektora przefiltrowanego oraz stosu budującego wielokąt.
+
+### Implementacja
+## Wyniki działania obu algorytmów
+
+```{r visualization, echo = FALSE, warning = FALSE, message = FALSE, fig.width = 12, fig.height = 6}
+library(ggplot2)
+library(gridExtra)
+library(ggrepel)
+
+# --- 1. Funkcja wyznaczająca otoczkę wypukłą (Monotone Chain) ---
+compute_convex_hull <- function(df) {
+  if (nrow(df) < 3) return(df)
+  
+  df <- df[order(df$x, df$y), ]
+  df <- unique(df)
+  
+  cross_product <- function(a, b, c) {
+    (b$x - a$x) * (c$y - a$y) - (b$y - a$y) * (c$x - a$x)
+  }
+  
+  # Dolna otoczka
+  lower <- data.frame()
+  for (i in 1:nrow(df)) {
+    p <- df[i, ]
+    while (nrow(lower) >= 2 && cross_product(lower[nrow(lower)-1, ], lower[nrow(lower), ], p) <= 0) {
+      lower <- lower[-nrow(lower), ]
+    }
+    lower <- rbind(lower, p)
+  }
+  
+  # Górna otoczka
+  upper <- data.frame()
+  for (i in nrow(df):1) {
+    p <- df[i, ]
+    while (nrow(upper) >= 2 && cross_product(upper[nrow(upper)-1, ], upper[nrow(upper), ], p) <= 0) {
+      upper <- upper[-nrow(upper), ]
+    }
+    upper <- rbind(upper, p)
+  }
+  
+  lower <- lower[-nrow(lower), ]
+  upper <- upper[-nrow(upper), ]
+  
+  hull <- rbind(lower, upper)
+  hull <- rbind(hull, hull[1, ])
+  return(hull)
+}
+
+# --- 2. Bezpieczne wczytywanie danych oryginalnych ---
+# Zmień ścieżkę, jeśli plik wejściowy znajduje się w innym folderze
+orig_lines <- readLines("data/DaneDoZadan/zad1/example_input.txt")
+n_orig <- as.numeric(orig_lines[1])
+
+orig_list <- lapply(3:(2 + n_orig), function(i) {
+  parts <- as.numeric(strsplit(orig_lines[i], "\\s+")[[1]])
+  data.frame(id = parts[1], x = parts[2], y = parts[3])
+})
+original_data <- do.call(rbind, orig_list)
+
+# --- 3. Funkcja wczytująca pliki wyjściowe z projektu ---
+read_new_output_custom <- function(filepath) {
+  lines <- readLines(filepath)
+  cones_list <- list()
+  
+  for (line in lines) {
+    if (grepl("^CONE", line)) {
+      clean_line <- gsub("CONE", "", line)
+      clean_line <- gsub("\\[|\\]", "", clean_line)
+      clean_line <- gsub(",", " ", clean_line)
+      
+      parts <- as.numeric(strsplit(trimws(clean_line), "\\s+")[[1]])
+      
+      id <- parts[1]
+      x <- parts[2]
+      y <- parts[3]
+      orig_ids <- parts[4:length(parts)]
+      
+      cones_list[[length(cones_list) + 1]] <- data.frame(
+        id = id,
+        x = x,
+        y = y,
+        n_merged = length(orig_ids),
+        merged_str = paste0("[", paste(orig_ids, collapse = ","), "]"),
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  
+  if (length(cones_list) == 0) {
+    return(data.frame(id=integer(), x=numeric(), y=numeric(), n_merged=integer(), merged_str=character()))
+  }
+  
+  do.call(rbind, cones_list)
+}
+
+# --- TUTAJ WYBIERASZ PLIKI ZAMIENIE Z KATALOGU ---
+# Możesz podmienić na "output_greedy_graham.txt" oraz "output_spatial_graham.txt"
+greedy_data <- read_new_output_custom("output_greedy_graham.txt")
+spatial_data <- read_new_output_custom("output_spatial_convexhull.txt")
+
+# --- 4. Funkcja rysująca z otoczką ---
+plot_deduplication_with_hull <- function(reduced_df, orig_df, title_text) {
+  single_pts <- subset(reduced_df, n_merged == 1)
+  merged_pts <- subset(reduced_df, n_merged > 1)
+  hull_df <- compute_convex_hull(reduced_df)
+  
+  ggplot() +
+    geom_point(data = orig_df, aes(x = x, y = y), color = "grey75", size = 2.5, alpha = 0.5) +
+    {if(nrow(hull_df) > 0) geom_path(data = hull_df, aes(x = x, y = y), color = "#2c3e50", linewidth = 1, linetype = "dashed")} +
+    geom_point(data = single_pts, aes(x = x, y = y), color = "grey30", size = 3, alpha = 0.8) +
+    geom_text_repel(
+      data = single_pts, aes(x = x, y = y, label = id),
+      size = 2.5, color = "grey40", box.padding = 0.2, point.padding = 0.2
+    ) +
+    geom_point(data = merged_pts, aes(x = x, y = y), color = "#c51b7d", size = 4.5, alpha = 0.95) +
+    geom_text_repel(
+      data = merged_pts, aes(x = x, y = y, label = id),
+      size = 3, fontface = "bold", color = "#c51b7d", box.padding = 0.4, point.padding = 0.4
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    labs(
+      title = title_text,
+      x = "X [m]",
+      y = "Y [m]"
+    ) +
+    coord_fixed()
+}
+
+p1 <- plot_deduplication_with_hull(greedy_data, original_data, "Redukcja: Greedy + Graham")
+p2 <- plot_deduplication_with_hull(spatial_data, original_data, "Redukcja: Spatial Hash + Monotone Chain")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Wyniki wyjściowe uzyskane dla obu zaimplementowanych algorytmów wykazują pełną zgodność z danymi referencyjnymi zawartymi w materiałach źródłowych.
+
+\newpage 
+
+# Zadanie 2
+
+## Co wiemy z treści i regulaminu?
+
+W tej konkurencji tor ma kształt cyfry 8 (dwóch połączonych okręgów wyznaczonych przez pachołki).
+
+
+Analiza zadania opiera się nie tylko na dostarczonych plikach pomiarowych, ale przede wszystkim na rygorystycznych wymaganiach regulaminowych konkurencji **Skidpad** (zgodnie z oficjalnym regulaminem Formula Student, sekcja D 4.1). Znajomość geometrii toru oraz procedury przejazdu stanowi kluczową bazę odniesienia (*ground truth*) do weryfikacji poprawności danych z sensorów.
+
+### Geometria toru i parametry przestrzenne (D 4.1.2, D 4.1.5)
+* **Kształt toru:** Konkurencja odbywa się na torze w kształcie cyfry 8, składającym się z dwóch stycznych okrągów wyznaczonych przez pachołki.
+* **Szerokość pasa:** Pas drogi ma stałą szerokość wynoszącą **3 m**, ograniczoną wewnętrznym okręgiem o średnicy $15.25\text{ m}$ (promień $r_{min} = 7.625\text{ m}$) oraz zewnętrznym okręgiem o średnicy $21.25\text{ m}$ (promień $r_{max} = 10.625\text{ m}$).
+* **Oś geometryczna pasa:** Nominalny promień przejazdu środkiem pasa wynosi:
+  $$r = \frac{7.625 + 10.625}{2} = 9.125\text{ m}$$
+* **Współrzędne środków okręgów:** Przyjęto układ, w którym środki okręgów znajdują się w odległości $18.25\text{ m}$ od siebie, co umieszcza je w punktach $(0, \pm 9.125)$ w lokalnym układzie współrzędnych.
+
+### Układ współrzędnych i warunki brzegowe (D 4.1.6)
+* **Linia startu/mety:** Zgodnie z punktem D 4.1.6 regulaminu, linia pomiaru czasu (start/meta) łączy środki obu okrągów, co oznacza, że współrzędna $x = 0$ leży bezpośrednio na tej linii, a okręgi stykają się w okolicach punktu $(0, 0)$.
+* **Warunki początkowe i końcowe:** Informacja z treści zadania o rozpoczęciu ruchu $15\text{ m}$ przed linią pomiaru ($x(0) = -15.0\text{ m}$) oraz zatrzymaniu $10\text{ m}$ za nią ($x(33) = 10.0\text{ m}$) nie jest założeniem arbitralnym – wynika bezpośrednio z geometrii rozmieszczenia stanowiska startowego względem punktu centralnego toru.
+
+### Weryfikacja fizyczna w oparciu o pas jazdy (Test spójności)
+* Ponieważ pojazd fizycznie porusza się wewnątrz 3-metrowego korytarza, **żaden poprawny odczyt nie może trwale opuścić wyznaczonego pasa ruchu**. 
+* Analiza wykresów surowych danych wykazuje, że czujniki dotknięte błędem dryfu lub inwersji przekraczają te granice (np. gęsty sensor osiąga wartości rzędu $x = -15.7\text{ m}$, wykraczając poza dopuszczalny margines). Procent punktów mieszczących się w nominalnym pasie jazdy stanowi zatem obiektywną miarę jakości każdego z sensorów przed i po fuzji.
+* *Uwaga operacyjna:* Procedura wjazdu na tor (rozpoczęcie przejazdu od prawego okręgu) opiera się na wytycznych regulaminowych dotyczących kierunku pokonywania pętli (oznaczonego strzałkami w dokumentacji technicznej
+zawodów).
+
+\newpage
+
+## Analiza porównawcza i charakterystyka błędów pomiarowych sensorów
+
+## Z czym pracujemy?
+
+Analiza opiera się na dwóch plikach danych pomiarowych dostarczonych w formacie CSV: **`sensor1.csv`** oraz **`sensor2.csv`**. Każdy z plików zawiera rejestrację przejazdu w strukturze kolumnowej:
+$$\text{timestamp}, x, y$$
+
+Gdzie poszczególne pola oznaczają:
+* **`timestamp`** – znacznik czasu w sekundach, określający moment dokonania pomiaru (dane obejmują przedział od ok. $0.008\text{ s}$ do $33.002\text{ s}$).
+* **`x`** – współrzędna wzdłużna położenia środka ciężkości bolidu w metrach (dodatnie wartości oznaczają ruch w przód, w tym punkty startowe i końcowe wynikające z regulaminu).
+* **`y`** – współrzędna poprzeczna położenia pojazdu w metrach (dodatnie wartości oznaczają przemieszczenie w lewo).
+
+### Charakterystyka źródeł danych
+
+Dostarczone sensory reprezentują dwie skrajnie różne technologie pomiarowe lub strumienie danych o odmiennej specyfice, co wymusza zastosowanie celowej fuzji:
+
+```{r error_correction_plots, echo = FALSE, warning = FALSE, message = FALSE, fig.width = 8, fig.height = 10}
+library(ggplot2)
+library(gridExtra)
+
+# --- 1. Wczytanie surowych danych ---
+sensor1 <- read.csv("data/DaneDoZadan/zad2/sensor1.csv")
+sensor2 <- read.csv("data/DaneDoZadan/zad2/sensor2.csv")
+
+# --- 2. Geometria toru Skidpad (regulamin D 4.1.2, D 4.1.5, D 4.1.6) ---
+R_in  <- 15.25 / 2            # promień wewnętrzny pasa [m]
+R_out <- 21.25 / 2            # promień zewnętrzny pasa [m]
+R0    <- (R_in + R_out) / 2   # oś pasa jazdy = 9.125 m
+
+circle <- function(cx, cy, r, n = 361) {
+  a <- seq(0, 2 * pi, length.out = n)
+  data.frame(x = cx + r * cos(a), y = cy + r * sin(a))
+}
+track <- do.call(rbind, lapply(c(R_in, R0, R_out), function(r)
+  rbind(cbind(circle(0,  R0, r), id = paste("g", r), rr = r),
+        cbind(circle(0, -R0, r), id = paste("d", r), rr = r))))
+
+track_layers <- list(
+  # granice pasa (ciągłe) i oś pasa (kropkowana)
+  geom_path(data = track, aes(x = x, y = y, group = id, linetype = factor(rr)),
+            colour = "grey55", linewidth = 0.4),
+  scale_linetype_manual(values = c("solid", "dotted", "solid"), guide = "none"),
+  # linia start/meta łączy środki kół (x = 0)
+  annotate("segment", x = 0, xend = 0, y = -R0, yend = R0,
+           colour = "grey30", linetype = "dashed", linewidth = 0.4),
+  # pas wjazdu/wyjazdu o szerokości 3 m (y = ±1.5)
+  annotate("segment", x = -15, xend = 10, y = c(-1.5, 1.5), yend = c(-1.5, 1.5),
+           colour = "grey75", linewidth = 0.3),
+  # punkt startu i mety
+  annotate("point", x = c(-15, 10), y = c(0, 0), shape = c(17, 15), size = 2.5),
+  annotate("text", x = c(-15, 10), y = c(-2.8, -2.8), size = 3,
+           label = c("start (-15, 0)", "meta (10, 0)"))
+)
+
+kol <- c("Sensor 1 (Surowy)" = "#7570b3", "Sensor 2 (Surowy)" = "#d95f02")
+
+# --- 3. Wykres 1: trajektoria 2D na tle toru ---
+p_traj <- ggplot() + track_layers +
+  geom_path(data = sensor1, aes(x = x, y = y, color = "Sensor 1 (Surowy)"), linewidth = 0.7, alpha = 0.7) +
+  geom_path(data = sensor2, aes(x = x, y = y, color = "Sensor 2 (Surowy)"), linewidth = 0.8, alpha = 0.8) +
+  scale_color_manual(values = kol) +
+  theme_minimal(base_size = 11) +
+  labs(title = "Surowe trajektorie sensorów na tle toru Skidpad",
+       subtitle = "Linie ciągłe: granice pasa jazdy; kropkowana: oś pasa; przerywana: linia start/meta",
+       x = "Współrzędna X [m]", y = "Współrzędna Y [m]", color = "Źródło danych") +
+  coord_fixed()
+
+# --- 4. Wykres 2: X(t) z oczekiwanymi punktami granicznymi ---
+p_time_x <- ggplot() +
+  geom_line(data = sensor1, aes(x = timestamp, y = x, color = "Sensor 1 (Surowy)"), linewidth = 0.7, alpha = 0.7) +
+  geom_line(data = sensor2, aes(x = timestamp, y = x, color = "Sensor 2 (Surowy)"), linewidth = 0.8, alpha = 0.8) +
+  annotate("point", x = c(0, 33), y = c(-15, 10), shape = 4, size = 3.5, stroke = 1.2) +
+  scale_color_manual(values = kol) +
+  theme_minimal(base_size = 11) +
+  labs(title = "Surowy przebieg współrzędnej X w czasie",
+       subtitle = "Krzyżyki: oczekiwane położenie na starcie (-15 m) i na końcu (10 m)",
+       x = "Czas [s]", y = "Współrzędna X [m]", color = "Źródło danych")
+
+# --- 5. Wykres 3: Y(t) ---
+p_time_y <- ggplot() +
+  geom_line(data = sensor1, aes(x = timestamp, y = y, color = "Sensor 1 (Surowy)"), linewidth = 0.7, alpha = 0.7) +
+  geom_line(data = sensor2, aes(x = timestamp, y = y, color = "Sensor 2 (Surowy)"), linewidth = 0.8, alpha = 0.8) +
+  scale_color_manual(values = kol) +
+  theme_minimal(base_size = 11) +
+  labs(title = "Surowy przebieg współrzędnej Y w czasie",
+       subtitle = "Przeciwne znaki Y w pierwszych kołach: jeden z czujników jest odbity lustrzanie",
+       x = "Czas [s]", y = "Współrzędna Y [m]", color = "Źródło danych")
+
+grid.arrange(p_traj, p_time_x, p_time_y, ncol = 1, heights = c(2.4, 1, 1))
+```
+
+1. **Sensor 1 (Strumień wysokoczęstotliwościowy, $\approx 45\text{ Hz}$):**
+   * *Zalety:* Charakteryzuje się wysoką gęstością prókowania, dzięki czemu doskonale oddaje dynamikę jazdy, kształt zakrętów oraz szybkie zmiany pozycji pojazdu.
+   * *Wady:* Posiada wady strukturalne – zaobserwowano w nim **inwersję osi Y** (współrzędne poprzeczne są odwrócone względem rzeczywistego kierunku jazdy, co tworzy obraz lustrzany) oraz skumulowany, nieliniowy **dryf** narastający w czasie.
+
+2. **Sensor 2 (Strumień niskoczęstotliwościowy, $\approx 2\text{ Hz}$):**
+   * *Zalety:* Stanowi stabilną bazę odniesienia w makroskali. Jego punkty początkowe i końcowe idealnie korelują z warunkami brzegowymi toru Skidpad ($x(0) = -15\text{ m}$ oraz $x(33) = 10\text{ m}$).
+   * *Wady:* Niska częstotliwość próbkowania uniemożliwia bezpośrednie odtworzenie płynnego toru jazdy (między kolejnymi pomiarami występują duże przerwy czasowe rzędu $0.5\text{ s}$), a dodatkowo strumień ten zawiera sporadyczne, skokowe zakłócenia (*outliery*).
+
+### Podsumowanie wyzwania analitycznego
+Praca z tymi danymi wymaga rozwiązania klasycznego problemu inżynierskiego: połączyć zalety obu sensorów – **wysoką rozdzielczość czasową i geometryczną Sensora 1** oraz **stabilność globalną Sensora 2** – odrzucając jednocześnie ich wady (dryf, inwersję osi oraz outliery) za pomocą spójnego algorytmu fuzji hybrydowej.
+
+## Analiza błędów
+
+### Obserwacje ogólne
+
+- Sensor 1 ma ok. 45 Hz, a Sensor 2 ok. 2 Hz (podaj wartości z Tabeli 1).
+- Kanciaste koła Sensora 2 to cięciwy zamiast łuków, więc wynikają z rzadkiego próbkowania. To nie jest błąd czujnika. Napisz to wprost, bo recenzent może wziąć to za błąd.
+
+
+### Sensor 2 (rzadki): odbicie osi Y, outliery, szum
+
+- Odbicie osi Y. Na szczycie pierwszego koła Sensor 1 ma y $\approx$ −17,3 m, a Sensor 2 y $\approx$ +18,1 m (z surowych danych; potwierdź Tabelą 2). Jeśli regulamin każe zaczynać od kół prawych (procedura przejazdu, nie D 4.1), to Sensor 2 jest lustrzany. Dodaj niezależny test: Tabela 3, norma residuum po odwróceniu y w każdym z czujników.
+
+- Outliery. Pojedyncze skoki o kilka metrów (np. przy t $\approx$ 1,49 s), widoczne na Rys. 2 jako punkty odstające od gładkiej krzywej.
+
+- Szum. Rozrzut rzędu dziesiątych części metra wokół trendu (podaj wartość z danych).
+
+- Brak dryfu. Koniec toru przy ok. (9,45; −0,09), czyli ok. 0,6 m od (10, 0).
+
+### Sensor 1 (gęsty): dryf
+
+- Obserwacja: zaczyna dokładnie w (−15, 0), a przy t = 33 s jest w okolicy (−8, −5), czyli ok. 18–19 m od (10, 0). Residuum na Rys. 2 rośnie gładko i bez skoków. Środki kół wędrują (Tabela 4). Pod koniec wychodzi poza pas jazdy (Tabela 4b).
+
+- Wniosek: błąd zaczyna się od zera i narasta, więc to dryf, a nie stały offset.
+
+- Hipoteza: całkowanie IMU lub żyroskopu bez korekty, gdzie błąd kursu rośnie z czasem. Wskaż też, jak ją sprawdzić: stały promień dopasowanych okręgów przy wędrującym środku sugeruje błąd kursu (obrót), a zmieniający się promień sugeruje błąd skali.
+
+
+Zakończ jednym zdaniem: błędy są komplementarne (jeden czujnik jest dobry w krótkiej skali czasu, drugi w długiej), dlatego w sekcji 4 stosuję fuzję zamiast wyboru „lepszego” czujnika.
+
+
+## 	Dlaczego takie przekształcenia?
+
+### Dlaczego surowe dane wymagają przekształceń wstępnych?
+
+Analiza wygenerowanych wykresów surowych danych wyraźnie wskazuje, że bezpośrednie zastosowanie jakichkolwiek algorytmów fuzji (np. obliczania residuów czy interpolacji) na czystych plikach CSV jest niemożliwe. Wynika to z dwóch kluczowych problemów strukturalnych widocznych w odczytach:
+
+1. **Inwersja osi Y (Efekt lustrzanego odbicia):**
+   * Na wykresie surowej trajektorii 2D oraz wykresie współrzędnej $Y w czasie widać, że jeden z sensorów rejestruje ruch w przeciwnym kierunku poprzecznym niż drugi (np. gdy jeden wskazuje wartości dodatnie, drugi ujemne o tej samej wielkości). 
+   * Przykładowo, w okolicach środka przejazdu różnica na osi $Y$ między sensorami wynosiłaby kilkadziesiąt metrów zamiast ułamków metrów. Odbicie lustrzane jest błędem układu współrzędnych lub konwencji zapisu danych przez dany sensor.
+   * **Wniosek:** Żaden filtr matematyczny nie skoryguje odwróconego znaku. Wymaga to jawnej, deterministycznej korekty geometrycznej (inwersji osi $Y$ jednego z sensorów) jako absolutnie pierwszego kroku przetwarzania.
+
+2. **Rozbieżność dynamiki i dryf:**
+   * Surowe wykresy w czasie ($X(t)$ oraz $Y(t)$) pokazują, że o ile oba czujniki początkowo startują z tego samego punktu ($x \approx -15\text{ m}$), o tyle wraz z upływem czasu Sensor 1 zaczyna nieliniowo "odjeżdżać" (dryfować) względem stabilnego Sensora 2.
+   * Dodatkowo w strumieniu rzadszym pojawiają się pojedyncze, gwałtowne skoki (*outliery*).
+
+Dlatego przed przejściem do właściwej fuzji niezbędne było wprowadzenie etupu **korekty układu odniesienia oraz detekcji anomalii**, co zapobiega propagacji błędów gruboziarnistych do ostatecznego wyniku.
+
+\newpage
+
+```{r setgfdup, include = FALSE}
+library(ggplot2)
+library(knitr)
+theme_set(theme_minimal(base_size = 11))
+
+
+path_s1 <- "data/DaneDoZadan/zad2/sensor1.csv"
+path_s2 <- "data/DaneDoZadan/zad2/sensor2.csv"
+```
+
+# Cel i założenia
+
+Celem jest wyznaczenie położenia środka ciężkości bolidu w **dowolnej chwili** $T \in [0, 33]$ s
+na podstawie dwóch błędnie działających czujników położenia (2D, widok z góry).
+
+Założenia wynikające z treści zadania i regulaminu:
+
+- dodatnie $x$ to ruch w przód, dodatnie $y$ to ruch w lewo,
+- linia startu/mety to linia łącząca środki kół (regulamin D 4.1.6), więc przyjmuję $x = 0$ na tej linii; bolid startuje 15 m przed nią
+  i zatrzymuje się 10 m za nią, czyli oczekiwane punkty graniczne to $(-15, 0)$ dla $t = 0$ i $(10, 0)$ dla $t = 33$,
+- geometria toru (D 4.1.2, D 4.1.5): środki kół w odległości 18,25 m, czyli w $(0, \pm 9{,}125)$; średnica wewnętrzna 15,25 m
+  ($R_{in} = 7{,}625$ m), zewnętrzna 21,25 m ($R_{out} = 10{,}625$ m); tor jazdy to pas **3 m** między nimi, więc oś pasa ma $R_0 = 9{,}125$ m,
+- okrążenie to przejazd jednego koła od linii startu/mety do niej samej (D 4.1.6),
+- kolejność kół: najpierw **prawe**, potem lewe. *Uwaga: ten warunek pochodzi z procedury przejazdu Skidpad w regulaminie (wpisz numer punktu);
+  sam fragment D 4.1 opisuje tylko układ toru.*
+
+Warunków granicznych **nie** używam do dopasowywania toru, tylko do oceny wyniku i do jednej decyzji o punkcie skrajnym (sekcja 4.4).
+
+# Dane
+
+## Wczytanie i podsumowanie
+
+```{r funkcje, echo = FALSE}
+hyp <- function(a, b) sqrt(a^2 + b^2)
+
+load_sensor <- function(path) {
+  d <- read.csv(path)
+  names(d) <- c("t", "x", "y")
+  d <- d[complete.cases(d), ]
+  d <- d[order(d$t), ]
+  d[!duplicated(d$t), ]          # duplikaty czasu = dzielenie przez 0 w interpolacji
+}
+
+# interpolacja liniowa; poza zakresem wartość skrajna (rule = 2)
+interp <- function(d, T) {
+  data.frame(t = T,
+             x = approx(d$t, d$x, xout = T, rule = 2)$y,
+             y = approx(d$t, d$y, xout = T, rule = 2)$y)
+}
+
+raw1 <- load_sensor(path_s1)
+raw2 <- load_sensor(path_s2)
+mdt  <- function(d) median(diff(d$t))
+
+summ <- function(d, name) data.frame(
+  Plik = name, Próbki = nrow(d),
+  `t od [s]` = min(d$t), `t do [s]` = max(d$t),
+  `Mediana kroku [s]` = round(mdt(d), 4),
+  `Częstotliwość [Hz]` = round(1 / mdt(d), 1),
+  check.names = FALSE)
+kable(rbind(summ(raw1, "sensor1.csv"), summ(raw2, "sensor2.csv")),
+      caption = "Tabela 1. Podstawowe parametry plików wejściowych.")
+```
+
+## Surowe trajektorie
+
+```{r raw-traj, fig.height = 5.5, fig.cap = "Rys. 1. Surowe trajektorie obu czujników (przed jakąkolwiek korektą). Linie ciągłe: granice pasa jazdy (r = 7,625 i 10,625 m), kropkowana: oś pasa (r = 9,125 m).", echo = FALSE}
+circle <- function(cx, cy, r, n = 361) {
+  a <- seq(0, 2 * pi, length.out = n)
+  data.frame(x = cx + r * cos(a), y = cy + r * sin(a))
+}
+R_in <- 15.25 / 2; R_out <- 21.25 / 2; R0 <- (R_in + R_out) / 2   # 7.625, 10.625, 9.125 (D 4.1.2)
+circ <- do.call(rbind, lapply(c(R_in, R0, R_out), function(r)
+  rbind(cbind(circle(0,  R0, r), id = paste("g", r), rr = r),
+        cbind(circle(0, -R0, r), id = paste("d", r), rr = r))))
+raw_all <- rbind(cbind(raw1, src = "sensor1.csv"), cbind(raw2, src = "sensor2.csv"))
+
+ggplot(raw_all, aes(x, y)) +
+  geom_path(data = circ, aes(group = id, linetype = factor(rr)), colour = "grey70") +
+  scale_linetype_manual(values = c("solid", "dotted", "solid"), guide = "none") +
+  geom_path(colour = "#377eb8") +
+  facet_wrap(~src) + coord_fixed() +
+  labs(x = "X [m]", y = "Y [m]")
+```
+
+Obserwacje wstępne: jeden czujnik jest bardzo gęsty i gładki, drugi rzadki, kanciasty i z pojedynczymi skokami.
+Kolejność kół jest w nich przeciwna (jeden zaczyna od dolnego, drugi od górnego).
+
+# Analiza błędów czujników (podpunkt 2.1)
+
+## Role czujników na podstawie próbkowania
+
+```{r roles, echo = FALSE}
+if (mdt(raw1) <= mdt(raw2)) {
+  fast_raw <- raw1; slow_raw <- raw2; fast_name <- "sensor1.csv"; slow_name <- "sensor2.csv"
+} else {
+  fast_raw <- raw2; slow_raw <- raw1; fast_name <- "sensor2.csv"; slow_name <- "sensor1.csv"
+}
+```
+
+Czujnik **gęsty**: `r fast_name` (`r round(1 / mdt(fast_raw), 1)` Hz).
+Czujnik **rzadki**: `r slow_name` (`r round(1 / mdt(slow_raw), 1)` Hz).
+Role wyznaczam z mediany kroku czasu, a nie z nazw plików.
+Ruch ma pasmo rzędu ułamka herca (okres jednego koła ok. 7 s), więc nawet rzadki czujnik spełnia kryterium Nyquista dla wolnych składowych.
+Błąd interpolacji liniowej łuku to jednak $\approx R(1-\cos(\omega h/2))$, czyli dla kroku rzadkiego czujnika rzędu dziesiątek centymetrów, a dla gęstego pomijalny.
+Dlatego **tor** biorę z czujnika gęstego, a rzadki posłuży do korekty.
+
+## Orientacja osi Y
+
+Regulamin: pierwsze koło jest **prawe**, więc w poprawnym układzie ($y>0$ = lewo) na szczycie pierwszego koła $y<0$.
+
+```{r orient, echo = FALSE}
+peak_y <- function(d, window = 10) {
+  w <- d[d$t - d$t[1] <= window, ]
+  w$y[which.max(abs(w$y))]
+}
+sg <- data.frame(
+  Czujnik = c(paste(fast_name, "(gęsty)"), paste(slow_name, "(rzadki)")),
+  `y na szczycie 1. koła [m]` = round(c(peak_y(fast_raw), peak_y(slow_raw)), 2),
+  Wniosek = c(ifelse(peak_y(fast_raw) < 0, "zgodny z regulaminem", "odbity lustrzanie"),
+              ifelse(peak_y(slow_raw) < 0, "zgodny z regulaminem", "odbity lustrzanie")),
+  check.names = FALSE)
+kable(sg, caption = "Tabela 2. Kierunek pierwszego zakrętu.")
+
+# Niezależny test: mediana normy residuum (rzadki - gęsty) dla wariantów odwrócenia y
+fl <- function(d) transform(d, y = -y)
+rn <- function(f, s) { i <- interp(f, s$t); median(hyp(s$x - i$x, s$y - i$y)) }
+orient <- data.frame(
+  Wariant = c("bez zmian (lub oba odwrócone)", "odwrócony y: czujnik rzadki", "odwrócony y: czujnik gęsty"),
+  `Mediana normy residuum [m]` = round(c(rn(fast_raw, slow_raw), rn(fast_raw, fl(slow_raw)),
+                                         rn(fl(fast_raw), slow_raw)), 2),
+  check.names = FALSE)
+kable(orient, caption = "Tabela 3. Zgodność czujników dla wariantów odwrócenia osi Y.")
+```
+
+Tabela 3 pokazuje, że **względna** orientacja czujników jest niespójna i wystarczy odwrócić jeden z nich.
+Który, rozstrzyga regulamin (Tabela 2): odwracam y w czujniku, który najpierw skręca w lewo.
+Uzasadnienie: odbicie lustrzane jest błędem systematycznym (izometria o wyznaczniku $-1$),
+którego żadna filtracja nie usunie. Wynik wymaga więc osobnego kroku.
+
+```{r normalize, echo = FALSE}
+norm_y <- function(d) if (peak_y(d) > 0) fl(d) else d
+fast_n <- norm_y(fast_raw)
+slow_n <- norm_y(slow_raw)
+flipped <- c(if (peak_y(fast_raw) > 0) fast_name, if (peak_y(slow_raw) > 0) slow_name)
+```
+
+Odwrócono znak y w: **`r paste(flipped, collapse = ", ")`**.
+
+## Charakter błędu: residuum czujnik rzadki − gęsty
+
+```{r resid-raw, fig.height = 5.5, fig.cap = "Rys. 2. Residuum e = rzadki − gęsty (po normalizacji osi Y). Gładka, narastająca krzywa to dryf; pojedyncze odstające punkty to outliery.", echo = FALSE}
+add_res <- function(fast, slow) {
+  f <- interp(fast, slow$t)
+  slow$ex <- slow$x - f$x
+  slow$ey <- slow$y - f$y
+  slow
+}
+s0 <- add_res(fast_n, slow_n)
+rl <- rbind(data.frame(t = s0$t, e = s0$ex, os = "e_x [m]"),
+            data.frame(t = s0$t, e = s0$ey, os = "e_y [m]"))
+ggplot(rl, aes(t, e)) + geom_line(colour = "grey60") + geom_point(size = 1.4) +
+  facet_wrap(~os, ncol = 1, scales = "free_y") + labs(x = "Czas [s]", y = NULL)
+```
+
+### Czujnik gęsty: dryf
+
+Residuum rośnie gładko i monotonicznie w skali całego przejazdu, a lokalnie zmienia się wolno.
+To sygnatura **dryfu**: błąd kursu $\theta(t)$ "obraca" całą trajektorię, więc błąd
+$\approx (R(\theta)-I)\,p(t)$ jest gładki i rośnie z czasem.
+
+```{r drift, echo = FALSE}
+h0   <- local({ n <- nrow(s0); dev <- numeric(n)
+  for (i in seq_len(n)) { idx <- max(1, i - 2):min(n, i + 2)
+    dev[i] <- hyp(s0$ex[i] - median(s0$ex[idx]), s0$ey[i] - median(s0$ey[idx])) }
+  dev <= max(1, 5 * 1.4826 * median(dev)) })
+s0$norm <- hyp(s0$ex, s0$ey)
+fit  <- lm(norm ~ t, data = s0[h0, ])
+```
+
+Po odrzuceniu punktów odstających średni przyrost błędu czujnika gęstego to ok.
+**`r round(coef(fit)[["t"]], 2)` m/s** (regresja liniowa normy residuum po czasie),
+a na końcu przejazdu błąd wynosi `r round(tail(s0$norm[h0], 1), 1)` m.
+
+### Czujnik rzadki: outliery i szum
+
+Na Rys. 2 widać `r sum(!h0)` punkty wyraźnie odstające od lokalnego trendu (rząd kilku metrów),
+przy typowym szumie rzędu dziesiątych części metra. Czujnik rzadki nie wykazuje narastającego błędu.
+Jego wiarygodność sprawdzam niezależnie w sekcji 4.5 (geometria toru) i 4.7 (leave-one-out).
+
+## Podejrzewane źródła nieprawidłowości
+
+To **hipotezy** wnioskowane z kształtu błędów, a nie dowody.
+
+| Błąd | Obserwacja | Prawdopodobne źródło |
+|---|---|---|
+| Czujnik gęsty: dryf | gładkie, narastające rozjeżdżanie się toru; bez skoków | nieskorygowane całkowanie IMU / żyroskopu (błąd biasu żyroskopu → błąd kursu rosnący z czasem), odometria kołowa bez korekty zewnętrznej |
+| Czujnik rzadki: outliery | pojedyncze skoki o kilka metrów, niska częstotliwość | odbiór GNSS: odbicia wielodrogowe (multipath), chwilowa utrata/zmiana satelitów |
+| Czujnik rzadki: szum | rozrzut rzędu 0,1–0,3 m | typowy szum pomiaru pozycji GNSS |
+| Odbicie osi Y u jednego z czujników | lustrzana kolejność kół | niespójna konwencja układu współrzędnych (np. $y$ w prawo zamiast w lewo) lub odwrócony montaż |
+
+# Metoda (podpunkt 2.2)
+
+## Model sygnału
+
+$$p_f(t) = p(t) + d(t) + n_f(t), \qquad p_s(t) = p(t) + n_s(t) + o(t)$$
+
+gdzie $p$ to prawdziwa pozycja, $d$ to dryf czujnika gęstego ($f$), $n$ to szumy, a $o$ to rzadkie outliery czujnika rzadkiego ($s$).
+
+## Algorytm (filtr komplementarny typu "error-state")
+
+1. **Korekta układu odniesienia**: odwrócenie y w czujniku, który najpierw skręca w lewo (sekcja 3.2).
+2. **Residuum** $e_i = p_s(t_i) - p_f(t_i)$ w chwilach pomiarów czujnika rzadkiego. Gęsty jest interpolowany liniowo.
+   Wtedy $e \approx -d + n_s - n_f + o$, czyli estymata błędu czujnika gęstego.
+3. **Filtr Hampela**: punkt $i$ odrzucam, gdy jego odległość od mediany residuów z okna 5 próbek
+   przekracza próg $\max(1\,\text{m},\; k \cdot 1{,}4826 \cdot \text{med}(\text{odchyleń}))$, $k=5$.
+   Mediana ignoruje pojedyncze skoki i nie myli wolnego trendu z anomalią (dla ciągu monotonicznego mediana to element środkowy).
+   Stałe są heurystyką: współczynnik 1,4826 odpowiada skali rozkładu normalnego 1D, a tu mierzymy normę 2D. Dlatego w sekcji 4.6 jest test wrażliwości.
+4. **Punkty skrajne**: okno Hampela jest tam jednostronne, więc mediana jest obciążona trendem. Punkt pierwszy i ostatni oceniam względem
+   warunków brzegowych z zadania, czyli akceptuję go, jeśli leży w odległości $\le 1$ m od $(-15,0)$ lub $(10,0)$.
+   Tolerancja 1 m jest mniejsza niż połowa szerokości 3-metrowego pasa wjazdu/wyjazdu (D 4.1.5), więc bolid nie mógł stać dalej od osi.
+5. **Poprawka** $e(t)$: interpolacja liniowa przyjętych residuów (poza zakresem wartość skrajna).
+6. **Wynik**: $\hat p(T) = p_f(T) + e(T)$.
+
+Czego świadomie **nie** robię: wygładzania wyniku ani $e(t)$ (na okręgu skraca promień i tłumi składową dryfu oscylującą z częstotliwością ruchu)
+oraz filtru Kalmana (brak modelu pojazdu i niepewności czujników, więc macierze kowariancji byłyby dobrane arbitralnie).
+
+## Implementacja
+
+```{r impl, echo = FALSE}
+hampel <- function(slow, half = 2, k = 5, floor = 1) {
+  n <- nrow(slow); dev <- numeric(n)
+  for (i in seq_len(n)) {
+    idx <- max(1, i - half):min(n, i + half)
+    dev[i] <- hyp(slow$ex[i] - median(slow$ex[idx]), slow$ey[i] - median(slow$ey[idx]))
+  }
+  prog <- max(floor, k * 1.4826 * median(dev))
+  list(dev = dev, prog = prog, ok = dev <= prog)
+}
+
+gate_edges <- function(slow, ok, tol = 1, t0 = 0, t1 = 33,
+                       p0 = c(-15, 0), p1 = c(10, 0)) {
+  n <- nrow(slow)
+  if (abs(slow$t[1] - t0) < 0.5) ok[1] <- hyp(slow$x[1] - p0[1], slow$y[1] - p0[2]) <= tol
+  if (abs(slow$t[n] - t1) < 0.5) ok[n] <- hyp(slow$x[n] - p1[1], slow$y[n] - p1[2]) <= tol
+  ok
+}
+
+fuse_at <- function(fast, slow, mask, T) {
+  f <- interp(fast, T)
+  data.frame(t = T,
+             x = f$x + approx(slow$t[mask], slow$ex[mask], xout = T, rule = 2)$y,
+             y = f$y + approx(slow$t[mask], slow$ey[mask], xout = T, rule = 2)$y)
+}
+
+T_grid <- seq(0, 33, by = 0.01)
+run_fusion <- function(fast, slow, k = 5, floor = 1, gate = TRUE, T = T_grid) {
+  s <- add_res(fast, slow)
+  h <- hampel(s, k = k, floor = floor)
+  ok <- if (gate) gate_edges(s, h$ok) else h$ok
+  s$dev <- h$dev; s$hampel_ok <- h$ok; s$accepted <- as.integer(ok)
+  list(slow = s, prog = h$prog, fused = fuse_at(fast, s, ok, T))
+}
+
+res        <- run_fusion(fast_n, slow_n)
+res_nogate <- run_fusion(fast_n, slow_n, gate = FALSE)
+slow_f     <- res$slow
+fused      <- res$fused
+
+# pozycja w dowolnym T (odpowiednik pętli interaktywnej programu C++)
+pozycja <- function(T) fuse_at(fast_n, slow_f, slow_f$accepted == 1, T)
+```
+
+# Wyniki i walidacja
+
+## Trajektoria po fuzji
+
+```{r traj-fused, fig.height = 8.5, fig.cap = "Rys. 3. Trajektoria po fuzji na tle czujników. Czarne krzyżyki: odrzucone punkty czujnika rzadkiego.", echo = FALSE}
+lab_fast <- "Czujnik gęsty (dryf)"; lab_slow <- "Czujnik rzadki (outliery)"; lab_fused <- "Wynik fuzji"
+cols <- setNames(c("#e41a1c", "#377eb8", "#4daf4a"), c(lab_fast, lab_slow, lab_fused))
+
+ggplot() +
+  geom_path(data = circ, aes(x, y, group = id, linetype = factor(rr)), colour = "grey60") +
+  scale_linetype_manual(values = c("solid", "dotted", "solid"), guide = "none") +
+  geom_path(data = fast_n, aes(x, y, colour = lab_fast), alpha = 0.6) +
+  geom_path(data = slow_n, aes(x, y, colour = lab_slow), alpha = 0.6) +
+  geom_point(data = subset(slow_f, accepted == 0), aes(x, y),
+             shape = 4, size = 3, stroke = 1.2, colour = "black") +
+  geom_path(data = fused, aes(x, y, colour = lab_fused), linewidth = 1.1) +
+  scale_colour_manual(values = cols) + coord_fixed() +
+  labs(x = "X [m]", y = "Y [m]", colour = NULL)
+```
+
+## Przebiegi w czasie
+
+```{r time-series, fig.height = 6, fig.cap = "Rys. 4. Współrzędne X(t) i Y(t): czujniki i wynik fuzji.", echo = FALSE}
+to_long <- function(d, src) rbind(data.frame(t = d$t, v = d$x, os = "X [m]", src = src),
+                                  data.frame(t = d$t, v = d$y, os = "Y [m]", src = src))
+long <- rbind(to_long(fast_n, lab_fast), to_long(slow_n, lab_slow), to_long(fused, lab_fused))
+ggplot(long, aes(t, v, colour = src)) + geom_line(alpha = 0.85) +
+  facet_wrap(~os, ncol = 1, scales = "free_y") + scale_colour_manual(values = cols) +
+  labs(x = "Czas [s]", y = NULL, colour = NULL)
+```
+
+## Detekcja outlierów (filtr Hampela)
+
+```{r hampel-plot, fig.cap = "Rys. 5. Odchylenie residuum od mediany okna i próg odrzucenia. Okrąg: punkt skrajny, dla którego decyzję podjęto na podstawie warunków brzegowych.", echo = FALSE}
+changed <- slow_f$accepted != as.integer(slow_f$hampel_ok)
+ggplot(slow_f, aes(t, dev)) +
+  geom_hline(yintercept = res$prog, linetype = "dashed", colour = "red") +
+  geom_point(aes(colour = hampel_ok), size = 1.8) +
+  geom_point(data = slow_f[changed, ], shape = 1, size = 5) +
+  scale_colour_manual(values = c("TRUE" = "grey30", "FALSE" = "red"),
+                      labels = c("TRUE" = "przyjęty", "FALSE" = "odrzucony")) +
+  labs(x = "Czas [s]", y = "Odchylenie od mediany okna [m]", colour = NULL)
+```
+
+Odrzucono `r sum(slow_f$accepted == 0)` z `r nrow(slow_f)` próbek (próg `r round(res$prog, 2)` m);
+bramka punktów skrajnych zmieniła decyzję dla `r sum(changed)` punktów.
+
+## Geometria toru jako kontrola poprawności
+
+Do każdego okrążenia dopasowuję okrąg (metoda najmniejszych kwadratów Kåsy). Oczekiwane: $c_x \approx 0$, $c_y \approx \mp 9{,}125$, $r \approx 9{,}125$ m.
+Okna czasowe odczytano z przebiegu $X(t)$ (kolejne przejścia przez $x \approx 0$).
+
+```{r circles, fig.height = 4, fig.cap = "Rys. 6. Promień dopasowanego okręgu dla każdego okrążenia. Linia przerywana: 9,125 m.", echo = FALSE}
+fit_circle <- function(x, y) {
+  A <- cbind(2 * x, 2 * y, 1)
+  s <- qr.solve(A, x^2 + y^2)
+  c(cx = s[[1]], cy = s[[2]], r = sqrt(s[[3]] + s[[1]]^2 + s[[2]]^2))
+}
+laps <- list("prawe 1" = c(3.0, 10.0), "prawe 2" = c(10.4, 17.2),
+             "lewe 1"  = c(17.8, 24.9), "lewe 2"  = c(25.3, 32.0))
+lap_fit <- function(d, name) do.call(rbind, lapply(names(laps), function(l) {
+  s <- d[d$t >= laps[[l]][1] & d$t <= laps[[l]][2], ]
+  data.frame(Źródło = name, Okrążenie = l, n = nrow(s), t(fit_circle(s$x, s$y)))
+}))
+slow_ok <- slow_f[slow_f$accepted == 1, ]
+tab_c <- rbind(lap_fit(fast_n, "gęsty"), lap_fit(slow_ok, "rzadki"), lap_fit(fused, "fuzja"))
+tab_c[, c("cx", "cy", "r")] <- round(tab_c[, c("cx", "cy", "r")], 2)
+kable(tab_c, row.names = FALSE, caption = "Tabela 4. Dopasowane okręgi dla poszczególnych okrążeń.")
+
+ggplot(tab_c, aes(Okrążenie, r, colour = Źródło, group = Źródło)) +
+  geom_hline(yintercept = R0, linetype = "dashed") +
+  geom_point(size = 2.5) + geom_line() + labs(y = "Promień r [m]")
+```
+
+Interpretacja: jeśli czujnik rzadki ma stabilne środki i promienie we wszystkich okrążeniach, a czujnik gęsty "wędruje",
+to potwierdza to założenie modelu (rzadki bez dryfu, gęsty z dryfem). Odchylenia rzędu dziesiątek centymetrów od 9,125 m
+nie muszą oznaczać błędu czujnika, bo bolid może jechać w dowolnym miejscu 3-metrowego pasa (D 4.1.5).
+
+**Twardy warunek z regulaminu:** prawdziwy tor leży w pasie $R_{in} \le r \le R_{out}$ względem środka aktualnego koła.
+Dlatego mierzę, jaki procent punktów każdego źródła mieści się w pasie. Czujnik z dryfem musi go z czasem opuścić.
+
+```{r lane, echo = FALSE}
+in_lane <- function(d, t0, t1, cy) {
+  s <- d[d$t >= t0 & d$t <= t1, ]
+  r <- hyp(s$x, s$y - cy)
+  mean(r >= R_in & r <= R_out)
+}
+cy_of <- function(l) if (grepl("^prawe", l)) -R0 else R0
+lane <- do.call(rbind, lapply(names(laps), function(l) data.frame(
+  Okrążenie = l,
+  `gęsty [%]`  = round(100 * in_lane(fast_n,  laps[[l]][1], laps[[l]][2], cy_of(l))),
+  `rzadki [%]` = round(100 * in_lane(slow_ok, laps[[l]][1], laps[[l]][2], cy_of(l))),
+  `fuzja [%]`  = round(100 * in_lane(fused,   laps[[l]][1], laps[[l]][2], cy_of(l))),
+  check.names = FALSE)))
+kable(lane, row.names = FALSE,
+      caption = "Tabela 4b. Odsetek punktów w pasie jazdy ($7.625\\text{ m} \\le r \\le 10.625\\text{ m}$ od środka koła).")
+```
+
+Okna `laps` leżą wewnątrz okrążeń (od przejścia przez linię start/meta do kolejnego), lekko przycięte, aby uniknąć przejść między kołami,
+gdzie tor jest styczny do osi X i nie opisuje go okrąg.
+
+## Warunki brzegowe: błąd na początku i końcu
+
+```{r ends, echo = FALSE}
+p_start <- function(d) { p <- interp(d, 0);  hyp(p$x + 15, p$y) }
+p_end   <- function(d) { p <- interp(d, 33); hyp(p$x - 10, p$y) }
+tab_e <- data.frame(
+  Wariant = c("czujnik gęsty", "czujnik rzadki", "fuzja bez bramki punktów skrajnych", "fuzja (finalna)"),
+  `Błąd względem (-15, 0) przy t = 0 [m]` = round(c(p_start(fast_n), p_start(slow_n),
+                                                    p_start(res_nogate$fused), p_start(fused)), 2),
+  `Błąd względem (10, 0) przy t = 33 [m]` = round(c(p_end(fast_n), p_end(slow_n),
+                                                    p_end(res_nogate$fused), p_end(fused)), 2),
+  check.names = FALSE)
+kable(tab_e, caption = "Tabela 5. Odległość od znanych punktów granicznych.")
+```
+
+Błąd końcowy fuzji nie spada do zera, bo szum czujnika rzadkiego (rzędu 0,1–0,3 m) przechodzi do wyniku.
+Nie wymuszam zgodności z $(10,0)$, aby nie ukryć rzeczywistego błędu czujnika.
+
+## Wrażliwość na parametry filtru Hampela
+
+```{r sensitivity, echo = FALSE}
+grid <- expand.grid(k = c(3, 4, 5, 6, 8), `próg dolny [m]` = c(0.5, 1, 1.5, 2), check.names = FALSE)
+grid$Odrzucone <- NA_integer_
+grid$`Błąd końca [m]` <- NA_real_
+for (i in seq_len(nrow(grid))) {
+  r <- run_fusion(fast_n, slow_n, k = grid$k[i], floor = grid$`próg dolny [m]`[i], T = 33)
+  grid$Odrzucone[i] <- sum(r$slow$accepted == 0)
+  grid$`Błąd końca [m]`[i] <- round(hyp(r$fused$x - 10, r$fused$y), 2)
+}
+kable(grid, caption = "Tabela 6. Liczba odrzuconych punktów i błąd końcowy dla różnych parametrów.")
+```
+
+Jeśli liczba odrzuconych punktów i błąd końcowy są stabilne w szerokim zakresie parametrów, wybór $k=5$, 1 m jest uzasadniony.
+Zmiany widoczne przy małych progach to fałszywe odrzucenia punktów w pobliżu ekstremów residuum.
+
+## Walidacja krzyżowa (leave-one-out)
+
+Dla każdej przyjętej próbki czujnika rzadkiego (poza skrajnymi) buduję poprawkę **bez niej** i porównuję przewidywaną pozycję z pomiarem.
+
+```{r loo, fig.height = 3.5, fig.cap = "Rys. 7. Błąd leave-one-out: odległość między pomiarem rzadkim a pozycją przewidzianą bez tego pomiaru.", echo = FALSE}
+ok_final <- slow_f$accepted == 1
+idx <- setdiff(which(ok_final), c(1, nrow(slow_f)))
+loo <- sapply(idx, function(i) {
+  m <- ok_final; m[i] <- FALSE
+  p <- fuse_at(fast_n, slow_f, m, slow_f$t[i])
+  hyp(p$x - slow_f$x[i], p$y - slow_f$y[i])
+})
+ggplot(data.frame(e = loo), aes(e)) + geom_histogram(bins = 20, fill = "#377eb8", colour = "white") +
+  labs(x = "Błąd leave-one-out [m]", y = "Liczba punktów")
+```
+
+Mediana błędu: **`r round(median(loo), 2)` m**, 95. percentyl: **`r round(quantile(loo, 0.95), 2)` m**.
+Jest to oszacowanie **z góry**, bo zawiera także szum samego pomiaru pominiętego punktu.
+
+## Kontrola fizyczna: przyspieszenie boczne
+
+```{r lateral, echo = FALSE}
+speed <- function(d, t0, t1, h = 0.25) {
+  tt <- seq(t0, t1, by = 0.05)
+  a <- interp(d, tt + h); b <- interp(d, tt - h)
+  hyp(a$x - b$x, a$y - b$y) / (2 * h)
+}
+v <- median(speed(fast_n, 4, 16))
+```
+
+Mediana prędkości na prawych kołach: `r round(v, 1)` m/s, więc przyspieszenie boczne $v^2/R_0 \approx$ **`r round(v^2 / R0, 1)` m/s²**
+(`r round(v^2 / R0 / 9.81, 2)` g). Wartość jest wiarygodna dla bolidu Formula Student, a wynik nie wymaga nierealistycznej dynamiki.
+
+# Ograniczenia
+
+- Szum czujnika rzadkiego (rzędu 0,1–0,3 m) przechodzi do wyniku, bo $e(t)$ interpoluję przez surowe punkty. Wygładzanie zmniejszyłoby szum, ale zniekształciłoby dryf i skracało promień.
+- Stałe filtru Hampela są heurystyczne (sekcja 4.6); okno 5 próbek może odrzucić poprawny punkt przy ekstremach residuum.
+- Bramka punktów skrajnych zakłada, że linia pomiaru ma $x=0$ i że czas przejazdu to $0$–$33$ s.
+- Źródła błędów (dryf IMU, multipath GNSS, konwencja osi) to hipotezy wnioskowane z sygnału, niezweryfikowane danymi z samych czujników.
+- Wiarygodność czujnika rzadkiego opiera się na zgodności z geometrią toru i warunkami brzegowymi. Dla punktów pośrednich jest to argument, a nie dowód.
+
+# Uruchomienie programu C++
+
+```bash
+g++ -std=c++17 -O2 -Wall -Wextra skidpad_fusion.cpp -o build/skidpad
+./build/skidpad data/DaneDoZadan/zad2/sensor1.csv data/DaneDoZadan/zad2/sensor2.csv
+```
+
+Program implementuje ten sam algorytm co powyższy kod R (kroki 1–6 z sekcji 4.2) i w pętli odpowiada na zapytania o $T$.
+Wartość kontrolna do porównania obu implementacji: `pozycja(26.821)` w R powinno dać to samo co wpisanie `26.821` w programie.
+
+```{r check-pos}
+kable(round(pozycja(c(0, 6, 26.821, 33)), 3), row.names = FALSE,
+      caption = "Tabela 7. Pozycje z implementacji w R dla kilku wartości T (do porównania z programem C++).")
+```
+
+# Wnioski
+
+1. Czujniki mają **różne i uzupełniające się** błędy: gęsty dryfuje (`r round(coef(fit)[["t"]], 2)` m/s), a rzadki ma outliery i szum.
+2. Jeden z czujników ma odwróconą oś Y. Wskazuje go regulamin (prawe koła najpierw), a nie sama niezgodność czujników.
+3. Fuzja `gęsty + poprawka(rzadki − gęsty)` zachowuje dynamikę czujnika gęstego i poziom bezwzględny czujnika rzadkiego, bez przełączania i bez skoków.
+4. Błąd leave-one-out ma medianę `r round(median(loo), 2)` m, a odległość końca od $(10,0)$ wynosi `r round(p_end(fused), 2)` m.
+5. Głównym ograniczeniem jest szum czujnika rzadkiego przechodzący do wyniku.
