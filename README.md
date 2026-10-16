@@ -172,12 +172,3 @@ Przykład z danymi przekazanymi z pliku (bez trybu interaktywnego):
 echo 10.5 | ./build/zad2_sensors data/DaneDoZadan/zad2/sensor1.csv data/DaneDoZadan/zad2/sensor2.csv
 ```
 
----
-
-## Najczęstsze problemy
-
-| Problem | Rozwiązanie |
-|---|---|
-| `Błąd wczytywania pliku lub pusta lista!` (zad. 1) | Uruchom program z katalogu głównego projektu lub ustaw *Working directory* w IDE. |
-| `Nie mozna otworzyc pliku: ...` (zad. 2) | Podaj ścieżki do `sensor1.csv` i `sensor2.csv` jako argumenty. |
-| Pliki `output_*` pojawiły się w nieoczekiwanym miejscu | Powstają w bieżącym katalogu roboczym procesu. |
