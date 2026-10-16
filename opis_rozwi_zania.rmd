@@ -1006,8 +1006,7 @@ Obserwacje wstępne: jeden czujnik jest bardzo gęsty i gładki, drugi rzadki, k
 
 - Wniosek: błąd zaczyna się od zera i narasta, więc to dryf, a nie stały offset.
 
-- Hipoteza: całkowanie IMU lub żyroskopu bez korekty. - **UWAGA TEN FRAGMENT ZOSTAŁ ZAPROPONOWANY PRZEZ MODEL GEMINI, NIE MAM OBECNIE NA TYLE WIEDZY DOMENOWEJ ŻEBY JEDNOZNACZNIE STWIERDZIĆ PRAWDZIWOŚĆ TEJ HIPOTEZY, LUB JEJ
-POPRAWNOŚĆ**
+- Hipoteza: całkowanie IMU lub żyroskopu bez korekty.
 
 ```{r roles, echo = FALSE}
 if (mdt(raw1) <= mdt(raw2)) {
@@ -1089,8 +1088,6 @@ To **hipotezy** wnioskowane z kształtu błędów, a nie dowody.
 | Czujnik rzadki: outliery | pojedyncze skoki o kilka metrów, niska częstotliwość | odbiór GNSS: odbicia wielodrogowe (multipath), chwilowa utrata/zmiana satelitów |
 | Czujnik rzadki: szum | rozrzut rzędu 0,1–0,3 m | typowy szum pomiaru pozycji GNSS |
 | Odbicie osi Y u jednego z czujników | lustrzana kolejność kół | niespójna konwencja układu współrzędnych (np. $y$ w prawo zamiast w lewo) lub odwrócony montaż |
-
-**W tym momencie znowu podkreślam, pokazane źródła nieprawidłowości są zaproponowane przez - model GEMINI, niestety samemu nie mam na tyle wiedzy domenowej i musiałbym się douczyć**
 
 \newpage
 

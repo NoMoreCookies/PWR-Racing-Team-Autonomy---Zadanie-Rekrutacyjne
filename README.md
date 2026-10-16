@@ -117,13 +117,13 @@ zad2_sensors [sensor1.csv sensor2.csv [prefiks_wyjscia]]
 **Wariant 1: z jawnymi ścieżkami (zalecany, niezależny od katalogu roboczego):**
 
 ```bash
-./build/zad2_sensors ../data/DaneDoZadan/zad2/sensor1.csv ../data/DaneDoZadan/zad2/sensor2.csv
+./build/Debug/zad2_sensors ../data/DaneDoZadan/zad2/sensor1.csv ../data/DaneDoZadan/zad2/sensor2.csv
 ```
 
 **Wariant 2: z własnym prefiksem plików wyjściowych:**
 
 ```bash
-./build/zad2_sensors ../data/DaneDoZadan/zad2/sensor1.csv ../data/DaneDoZadan/zad2/sensor2.csv wynik
+./build/Debug/zad2_sensors ../data/DaneDoZadan/zad2/sensor1.csv ../data/DaneDoZadan/zad2/sensor2.csv wynik
 ```
 
 **Wariant 3: bez argumentów.** Program szuka plików w kolejności:
