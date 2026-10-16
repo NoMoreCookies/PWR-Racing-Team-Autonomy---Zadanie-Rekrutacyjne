@@ -26,7 +26,7 @@ void saveResultsToFile(const std::string& filename, const std::vector<Point>& re
     std::ofstream outfile(filename);
     outfile << std::fixed << std::setprecision(3);
 
-    // 1. Zapis pachołków
+    // Zapis pachołków
     for (const auto& p : reducedPoints) {
         outfile << "CONE " << p.id << " " << p.x << " " << p.y << " [";
         for (size_t i = 0; i < p.originalIds.size(); ++i) {
@@ -38,7 +38,7 @@ void saveResultsToFile(const std::string& filename, const std::vector<Point>& re
         outfile << "]\n";
     }
 
-    // 2. Zapis otoczki wypukłej
+    // Zapis otoczki wypukłej
     double perimeter = calculatePerimeter(hull);
     outfile << "ENCLOSURE " << perimeter << " [";
     for (size_t i = 0; i < hull.size(); ++i) {
@@ -53,10 +53,10 @@ void saveResultsToFile(const std::string& filename, const std::vector<Point>& re
 }
 
 int main() {
-    double threshold = 0.5; // Próg (eps) dla redukcji
+    double threshold = 0.5; // Próg (eps) dla redukcji [początkowy, on jest potem zmieniany i tak]
     std::string inputPath = "data/DaneDoZadan/zad1/example_input.txt";
 
-    // Wczytanie danych z pliku (threshold jest aktualizowany wewnątrz przez loadPointsFromFile, jeśli taka jest jego logika)
+    // Wczytanie danych z pliku
     auto points = loadPointsFromFile(inputPath, threshold);
     if (points.empty()) {
         std::cerr << "Błąd wczytywania pliku lub pusta lista!\n";
