@@ -27,7 +27,7 @@ std::vector<Point> grahamScanHull(std::vector<Point> points) {
         return cp > 0;
     });
 
-    // 3. Usuwam punkty o tym samym kącie (zostawiając najdalej położony - bo tylko on może leżeć na otoczce)
+    // Usuwam punkty o tym samym kącie (zostawiając najdalej położony - bo tylko on może leżeć na otoczce)
     std::vector<Point> filtered;
     filtered.push_back(points[0]);
     for (size_t i = 1; i < points.size(); ++i) {
@@ -39,7 +39,7 @@ std::vector<Point> grahamScanHull(std::vector<Point> points) {
 
     if (filtered.size() < 3) return filtered;
 
-    // Algorytm Graham oparty na stosie
+    // Algorytm
     std::vector<Point> hull;
     hull.push_back(filtered[0]);
     hull.push_back(filtered[1]);

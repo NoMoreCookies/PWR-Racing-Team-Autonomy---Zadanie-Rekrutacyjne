@@ -520,11 +520,6 @@ Wyniki wyjściowe uzyskane dla obu zaimplementowanych algorytmów wykazują peł
 
 ## Co wiemy z treści i regulaminu?
 
-W tej konkurencji tor ma kształt cyfry 8 (dwóch połączonych okręgów wyznaczonych przez pachołki).
-
-
-Analiza zadania opiera się nie tylko na dostarczonych plikach pomiarowych, ale przede wszystkim na rygorystycznych wymaganiach regulaminowych konkurencji **Skidpad** (zgodnie z oficjalnym regulaminem Formula Student, sekcja D 4.1). Znajomość geometrii toru oraz procedury przejazdu stanowi kluczową bazę odniesienia (*ground truth*) do weryfikacji poprawności danych z sensorów.
-
 ### Geometria toru i parametry przestrzenne (D 4.1.2, D 4.1.5)
 * **Kształt toru:** Konkurencja odbywa się na torze w kształcie cyfry 8, składającym się z dwóch stycznych okrągów wyznaczonych przez pachołki.
 * **Szerokość pasa:** Pas drogi ma stałą szerokość wynoszącą **3 m**, ograniczoną wewnętrznym okręgiem o średnicy $15.25\text{ m}$ (promień $r_{min} = 7.625\text{ m}$) oraz zewnętrznym okręgiem o średnicy $21.25\text{ m}$ (promień $r_{max} = 10.625\text{ m}$).
@@ -539,8 +534,6 @@ Analiza zadania opiera się nie tylko na dostarczonych plikach pomiarowych, ale 
 ### Weryfikacja fizyczna w oparciu o pas jazdy (Test spójności)
 * Ponieważ pojazd fizycznie porusza się wewnątrz 3-metrowego korytarza, **żaden poprawny odczyt nie może trwale opuścić wyznaczonego pasa ruchu**. 
 * Analiza wykresów surowych danych wykazuje, że czujniki dotknięte błędem dryfu lub inwersji przekraczają te granice (np. gęsty sensor osiąga wartości rzędu $x = -15.7\text{ m}$, wykraczając poza dopuszczalny margines). Procent punktów mieszczących się w nominalnym pasie jazdy stanowi zatem obiektywną miarę jakości każdego z sensorów przed i po fuzji.
-* *Uwaga operacyjna:* Procedura wjazdu na tor (rozpoczęcie przejazdu od prawego okręgu) opiera się na wytycznych regulaminowych dotyczących kierunku pokonywania pętli (oznaczonego strzałkami w dokumentacji technicznej
-zawodów).
 
 \newpage
 
@@ -552,13 +545,18 @@ Analiza opiera się na dwóch plikach danych pomiarowych dostarczonych w formaci
 $$\text{timestamp}, x, y$$
 
 Gdzie poszczególne pola oznaczają:
+
 * **`timestamp`** – znacznik czasu w sekundach, określający moment dokonania pomiaru (dane obejmują przedział od ok. $0.008\text{ s}$ do $33.002\text{ s}$).
+
 * **`x`** – współrzędna wzdłużna położenia środka ciężkości bolidu w metrach (dodatnie wartości oznaczają ruch w przód, w tym punkty startowe i końcowe wynikające z regulaminu).
+
 * **`y`** – współrzędna poprzeczna położenia pojazdu w metrach (dodatnie wartości oznaczają przemieszczenie w lewo).
+
+\newpage
 
 ### Charakterystyka źródeł danych
 
-Dostarczone sensory reprezentują dwie skrajnie różne technologie pomiarowe lub strumienie danych o odmiennej specyfice, co wymusza zastosowanie celowej fuzji:
+Dostarczone sensory reprezentują dwie różne technologie pomiarowe/strumienie danych o odmiennej specyfice, co wymusza zastosowanie fuzji:
 
 ```{r error_correction_plots, echo = FALSE, warning = FALSE, message = FALSE, fig.width = 8, fig.height = 10}
 library(ggplot2)
@@ -636,31 +634,28 @@ grid.arrange(p_traj, p_time_x, p_time_y, ncol = 1, heights = c(2.4, 1, 1))
 ```
 
 1. **Sensor 1 (Strumień wysokoczęstotliwościowy, $\approx 45\text{ Hz}$):**
-   * *Zalety:* Charakteryzuje się wysoką gęstością prókowania, dzięki czemu doskonale oddaje dynamikę jazdy, kształt zakrętów oraz szybkie zmiany pozycji pojazdu.
-   * *Wady:* Posiada wady strukturalne – zaobserwowano w nim **inwersję osi Y** (współrzędne poprzeczne są odwrócone względem rzeczywistego kierunku jazdy, co tworzy obraz lustrzany) oraz skumulowany, nieliniowy **dryf** narastający w czasie.
+   * *Zalety:* Charakteryzuje się wysoką gęstością prókowania, dzięki czemu dobrze oddaje dynamikę jazdy
+   * *Wady:*  **inwersja osi Y** (współrzędne poprzeczne są odwrócone względem rzeczywistego kierunku jazdy, co tworzy obraz lustrzany) oraz skumulowany, nieliniowy **dryf** narastający w czasie.
 
 2. **Sensor 2 (Strumień niskoczęstotliwościowy, $\approx 2\text{ Hz}$):**
    * *Zalety:* Stanowi stabilną bazę odniesienia w makroskali. Jego punkty początkowe i końcowe idealnie korelują z warunkami brzegowymi toru Skidpad ($x(0) = -15\text{ m}$ oraz $x(33) = 10\text{ m}$).
    * *Wady:* Niska częstotliwość próbkowania uniemożliwia bezpośrednie odtworzenie płynnego toru jazdy (między kolejnymi pomiarami występują duże przerwy czasowe rzędu $0.5\text{ s}$), a dodatkowo strumień ten zawiera sporadyczne, skokowe zakłócenia (*outliery*).
 
-### Podsumowanie wyzwania analitycznego
-Praca z tymi danymi wymaga rozwiązania klasycznego problemu inżynierskiego: połączyć zalety obu sensorów – **wysoką rozdzielczość czasową i geometryczną Sensora 1** oraz **stabilność globalną Sensora 2** – odrzucając jednocześnie ich wady (dryf, inwersję osi oraz outliery) za pomocą spójnego algorytmu fuzji hybrydowej.
-
 ## Analiza błędów
 
 ### Obserwacje ogólne
 
-- Sensor 1 ma ok. 45 Hz, a Sensor 2 ok. 2 Hz (podaj wartości z Tabeli 1).
-- Kanciaste koła Sensora 2 to cięciwy zamiast łuków, więc wynikają z rzadkiego próbkowania. To nie jest błąd czujnika. Napisz to wprost, bo recenzent może wziąć to za błąd.
+- Sensor 1 ma ok. 45 Hz, a Sensor 2 ok. 2 Hz
+- Kanciaste koła Sensora 2 to cięciwy zamiast łuków, wynikają z rzadkiego próbkowania.
 
 
 ### Sensor 2 (rzadki): odbicie osi Y, outliery, szum
 
-- Odbicie osi Y. Na szczycie pierwszego koła Sensor 1 ma y $\approx$ −17,3 m, a Sensor 2 y $\approx$ +18,1 m (z surowych danych; potwierdź Tabelą 2). Jeśli regulamin każe zaczynać od kół prawych (procedura przejazdu, nie D 4.1), to Sensor 2 jest lustrzany. Dodaj niezależny test: Tabela 3, norma residuum po odwróceniu y w każdym z czujników.
+- Odbicie osi Y. Na szczycie pierwszego koła Sensor 1 ma y $\approx$ −17,3 m, a Sensor 2 y $\approx$ +18,1 m.
 
 - Outliery. Pojedyncze skoki o kilka metrów (np. przy t $\approx$ 1,49 s), widoczne na Rys. 2 jako punkty odstające od gładkiej krzywej.
 
-- Szum. Rozrzut rzędu dziesiątych części metra wokół trendu (podaj wartość z danych).
+- Szum. Rozrzut rzędu dziesiątych części metra wokół trendu.
 
 - Brak dryfu. Koniec toru przy ok. (9,45; −0,09), czyli ok. 0,6 m od (10, 0).
 
@@ -670,17 +665,11 @@ Praca z tymi danymi wymaga rozwiązania klasycznego problemu inżynierskiego: po
 
 - Wniosek: błąd zaczyna się od zera i narasta, więc to dryf, a nie stały offset.
 
-- Hipoteza: całkowanie IMU lub żyroskopu bez korekty, gdzie błąd kursu rośnie z czasem. Wskaż też, jak ją sprawdzić: stały promień dopasowanych okręgów przy wędrującym środku sugeruje błąd kursu (obrót), a zmieniający się promień sugeruje błąd skali.
+- Hipoteza: całkowanie IMU lub żyroskopu bez korekty. - UWAGA TEN FRAGMENT ZOSTAŁ ZAPROPONOWANY PRZEZ MODEL GEMINI, NIE MAM OBECNIE NA TYLE WIEDZY DOMENOWEJ ŻEBY JEDNOZNACZNIE STWIERDZIĆ PRAWDZIWOŚĆ TEGO STWIERDZENIA
 
-
-Zakończ jednym zdaniem: błędy są komplementarne (jeden czujnik jest dobry w krótkiej skali czasu, drugi w długiej), dlatego w sekcji 4 stosuję fuzję zamiast wyboru „lepszego” czujnika.
 
 
 ## 	Dlaczego takie przekształcenia?
-
-### Dlaczego surowe dane wymagają przekształceń wstępnych?
-
-Analiza wygenerowanych wykresów surowych danych wyraźnie wskazuje, że bezpośrednie zastosowanie jakichkolwiek algorytmów fuzji (np. obliczania residuów czy interpolacji) na czystych plikach CSV jest niemożliwe. Wynika to z dwóch kluczowych problemów strukturalnych widocznych w odczytach:
 
 1. **Inwersja osi Y (Efekt lustrzanego odbicia):**
    * Na wykresie surowej trajektorii 2D oraz wykresie współrzędnej $Y w czasie widać, że jeden z sensorów rejestruje ruch w przeciwnym kierunku poprzecznym niż drugi (np. gdy jeden wskazuje wartości dodatnie, drugi ujemne o tej samej wielkości). 
@@ -690,44 +679,12 @@ Analiza wygenerowanych wykresów surowych danych wyraźnie wskazuje, że bezpoś
 2. **Rozbieżność dynamiki i dryf:**
    * Surowe wykresy w czasie ($X(t)$ oraz $Y(t)$) pokazują, że o ile oba czujniki początkowo startują z tego samego punktu ($x \approx -15\text{ m}$), o tyle wraz z upływem czasu Sensor 1 zaczyna nieliniowo "odjeżdżać" (dryfować) względem stabilnego Sensora 2.
    * Dodatkowo w strumieniu rzadszym pojawiają się pojedyncze, gwałtowne skoki (*outliery*).
-
-Dlatego przed przejściem do właściwej fuzji niezbędne było wprowadzenie etupu **korekty układu odniesienia oraz detekcji anomalii**, co zapobiega propagacji błędów gruboziarnistych do ostatecznego wyniku.
-
-\newpage
-
-```{r setgfdup, include = FALSE}
-library(ggplot2)
-library(knitr)
-theme_set(theme_minimal(base_size = 11))
-
+   
+```{r raw-traj, fig.height = 5.5, fig.cap = "Rys. 1. Surowe trajektorie obu czujników (przed jakąkolwiek korektą). Linie ciągłe: granice pasa jazdy (r = 7,625 i 10,625 m), kropkowana: oś pasa (r = 9,125 m).", echo = FALSE}
 
 path_s1 <- "data/DaneDoZadan/zad2/sensor1.csv"
 path_s2 <- "data/DaneDoZadan/zad2/sensor2.csv"
-```
 
-# Cel i założenia
-
-Celem jest wyznaczenie położenia środka ciężkości bolidu w **dowolnej chwili** $T \in [0, 33]$ s
-na podstawie dwóch błędnie działających czujników położenia (2D, widok z góry).
-
-Założenia wynikające z treści zadania i regulaminu:
-
-- dodatnie $x$ to ruch w przód, dodatnie $y$ to ruch w lewo,
-- linia startu/mety to linia łącząca środki kół (regulamin D 4.1.6), więc przyjmuję $x = 0$ na tej linii; bolid startuje 15 m przed nią
-  i zatrzymuje się 10 m za nią, czyli oczekiwane punkty graniczne to $(-15, 0)$ dla $t = 0$ i $(10, 0)$ dla $t = 33$,
-- geometria toru (D 4.1.2, D 4.1.5): środki kół w odległości 18,25 m, czyli w $(0, \pm 9{,}125)$; średnica wewnętrzna 15,25 m
-  ($R_{in} = 7{,}625$ m), zewnętrzna 21,25 m ($R_{out} = 10{,}625$ m); tor jazdy to pas **3 m** między nimi, więc oś pasa ma $R_0 = 9{,}125$ m,
-- okrążenie to przejazd jednego koła od linii startu/mety do niej samej (D 4.1.6),
-- kolejność kół: najpierw **prawe**, potem lewe. *Uwaga: ten warunek pochodzi z procedury przejazdu Skidpad w regulaminie (wpisz numer punktu);
-  sam fragment D 4.1 opisuje tylko układ toru.*
-
-Warunków granicznych **nie** używam do dopasowywania toru, tylko do oceny wyniku i do jednej decyzji o punkcie skrajnym (sekcja 4.4).
-
-# Dane
-
-## Wczytanie i podsumowanie
-
-```{r funkcje, echo = FALSE}
 hyp <- function(a, b) sqrt(a^2 + b^2)
 
 load_sensor <- function(path) {
@@ -745,23 +702,13 @@ interp <- function(d, T) {
              y = approx(d$t, d$y, xout = T, rule = 2)$y)
 }
 
-raw1 <- load_sensor(path_s1)
-raw2 <- load_sensor(path_s2)
+
 mdt  <- function(d) median(diff(d$t))
 
-summ <- function(d, name) data.frame(
-  Plik = name, Próbki = nrow(d),
-  `t od [s]` = min(d$t), `t do [s]` = max(d$t),
-  `Mediana kroku [s]` = round(mdt(d), 4),
-  `Częstotliwość [Hz]` = round(1 / mdt(d), 1),
-  check.names = FALSE)
-kable(rbind(summ(raw1, "sensor1.csv"), summ(raw2, "sensor2.csv")),
-      caption = "Tabela 1. Podstawowe parametry plików wejściowych.")
-```
+raw1 <- load_sensor(path_s1)
+raw2 <- load_sensor(path_s2)
 
-## Surowe trajektorie
 
-```{r raw-traj, fig.height = 5.5, fig.cap = "Rys. 1. Surowe trajektorie obu czujników (przed jakąkolwiek korektą). Linie ciągłe: granice pasa jazdy (r = 7,625 i 10,625 m), kropkowana: oś pasa (r = 9,125 m).", echo = FALSE}
 circle <- function(cx, cy, r, n = 361) {
   a <- seq(0, 2 * pi, length.out = n)
   data.frame(x = cx + r * cos(a), y = cy + r * sin(a))
@@ -780,6 +727,51 @@ ggplot(raw_all, aes(x, y)) +
   labs(x = "X [m]", y = "Y [m]")
 ```
 
+\newpage
+
+```{r setgfdup, include = FALSE}
+library(ggplot2)
+library(knitr)
+theme_set(theme_minimal(base_size = 11))
+
+
+```
+
+# Cel i założenia
+
+Celem jest wyznaczenie położenia środka ciężkości bolidu w **dowolnej chwili** $T \in [0, 33]$ s
+na podstawie dwóch błędnie działających czujników położenia (2D, widok z góry).
+
+Założenia wynikające z treści zadania i regulaminu:
+
+- dodatnie $x$ to ruch w przód, dodatnie $y$ to ruch w lewo,
+- linia startu/mety to linia łącząca środki kół (regulamin D 4.1.6), więc przyjmuję $x = 0$ na tej linii; bolid startuje 15 m przed nią
+  i zatrzymuje się 10 m za nią, czyli oczekiwane punkty graniczne to $(-15, 0)$ dla $t = 0$ i $(10, 0)$ dla $t = 33$,
+- geometria toru (D 4.1.2, D 4.1.5): środki kół w odległości 18,25 m, czyli w $(0, \pm 9{,}125)$; średnica wewnętrzna 15,25 m
+  ($R_{in} = 7{,}625$ m), zewnętrzna 21,25 m ($R_{out} = 10{,}625$ m); tor jazdy to pas **3 m** między nimi, więc oś pasa ma $R_0 = 9{,}125$ m,
+- okrążenie to przejazd jednego koła od linii startu/mety do niej samej (D 4.1.6),
+- kolejność kół: najpierw **prawe**, potem lewe.
+
+# Dane
+
+## Wczytanie i podsumowanie
+
+```{r funkcje, echo = FALSE}
+
+summ <- function(d, name) data.frame(
+  Plik = name, Próbki = nrow(d),
+  `t od [s]` = min(d$t), `t do [s]` = max(d$t),
+  `Mediana kroku [s]` = round(mdt(d), 4),
+  `Częstotliwość [Hz]` = round(1 / mdt(d), 1),
+  check.names = FALSE)
+kable(rbind(summ(raw1, "sensor1.csv"), summ(raw2, "sensor2.csv")),
+      caption = "Tabela 1. Podstawowe parametry plików wejściowych.")
+```
+
+## Surowe trajektorie
+
+
+
 Obserwacje wstępne: jeden czujnik jest bardzo gęsty i gładki, drugi rzadki, kanciasty i z pojedynczymi skokami.
 Kolejność kół jest w nich przeciwna (jeden zaczyna od dolnego, drugi od górnego).
 
@@ -797,14 +789,13 @@ if (mdt(raw1) <= mdt(raw2)) {
 
 Czujnik **gęsty**: `r fast_name` (`r round(1 / mdt(fast_raw), 1)` Hz).
 Czujnik **rzadki**: `r slow_name` (`r round(1 / mdt(slow_raw), 1)` Hz).
-Role wyznaczam z mediany kroku czasu, a nie z nazw plików.
 Ruch ma pasmo rzędu ułamka herca (okres jednego koła ok. 7 s), więc nawet rzadki czujnik spełnia kryterium Nyquista dla wolnych składowych.
 Błąd interpolacji liniowej łuku to jednak $\approx R(1-\cos(\omega h/2))$, czyli dla kroku rzadkiego czujnika rzędu dziesiątek centymetrów, a dla gęstego pomijalny.
 Dlatego **tor** biorę z czujnika gęstego, a rzadki posłuży do korekty.
 
 ## Orientacja osi Y
 
-Regulamin: pierwsze koło jest **prawe**, więc w poprawnym układzie ($y>0$ = lewo) na szczycie pierwszego koła $y<0$.
+Pierwsze koło jest **prawe**, więc w poprawnym układzie ($y>0$ = lewo) na szczycie pierwszego koła $y<0$. - pierwsze prawe to też informacja z Claude
 
 ```{r orient, echo = FALSE}
 peak_y <- function(d, window = 10) {
@@ -819,30 +810,16 @@ sg <- data.frame(
   check.names = FALSE)
 kable(sg, caption = "Tabela 2. Kierunek pierwszego zakrętu.")
 
-# Niezależny test: mediana normy residuum (rzadki - gęsty) dla wariantów odwrócenia y
-fl <- function(d) transform(d, y = -y)
-rn <- function(f, s) { i <- interp(f, s$t); median(hyp(s$x - i$x, s$y - i$y)) }
-orient <- data.frame(
-  Wariant = c("bez zmian (lub oba odwrócone)", "odwrócony y: czujnik rzadki", "odwrócony y: czujnik gęsty"),
-  `Mediana normy residuum [m]` = round(c(rn(fast_raw, slow_raw), rn(fast_raw, fl(slow_raw)),
-                                         rn(fl(fast_raw), slow_raw)), 2),
-  check.names = FALSE)
-kable(orient, caption = "Tabela 3. Zgodność czujników dla wariantów odwrócenia osi Y.")
 ```
 
-Tabela 3 pokazuje, że **względna** orientacja czujników jest niespójna i wystarczy odwrócić jeden z nich.
-Który, rozstrzyga regulamin (Tabela 2): odwracam y w czujniku, który najpierw skręca w lewo.
-Uzasadnienie: odbicie lustrzane jest błędem systematycznym (izometria o wyznaczniku $-1$),
-którego żadna filtracja nie usunie. Wynik wymaga więc osobnego kroku.
-
 ```{r normalize, echo = FALSE}
+fl <- function(d) -d
 norm_y <- function(d) if (peak_y(d) > 0) fl(d) else d
 fast_n <- norm_y(fast_raw)
 slow_n <- norm_y(slow_raw)
 flipped <- c(if (peak_y(fast_raw) > 0) fast_name, if (peak_y(slow_raw) > 0) slow_name)
 ```
 
-Odwrócono znak y w: **`r paste(flipped, collapse = ", ")`**.
 
 ## Charakter błędu: residuum czujnik rzadki − gęsty
 
@@ -884,6 +861,9 @@ a na końcu przejazdu błąd wynosi `r round(tail(s0$norm[h0], 1), 1)` m.
 Na Rys. 2 widać `r sum(!h0)` punkty wyraźnie odstające od lokalnego trendu (rząd kilku metrów),
 przy typowym szumie rzędu dziesiątych części metra. Czujnik rzadki nie wykazuje narastającego błędu.
 Jego wiarygodność sprawdzam niezależnie w sekcji 4.5 (geometria toru) i 4.7 (leave-one-out).
+
+
+\newpage
 
 ## Podejrzewane źródła nieprawidłowości
 
@@ -1092,7 +1072,7 @@ Nie wymuszam zgodności z $(10,0)$, aby nie ukryć rzeczywistego błędu czujnik
 ```{r sensitivity, echo = FALSE}
 grid <- expand.grid(k = c(3, 4, 5, 6, 8), `próg dolny [m]` = c(0.5, 1, 1.5, 2), check.names = FALSE)
 grid$Odrzucone <- NA_integer_
-grid$`Błąd końca [m]` <- NA_real_
+grid$`Błąd końca [m]` <- NA_real_f
 for (i in seq_len(nrow(grid))) {
   r <- run_fusion(fast_n, slow_n, k = grid$k[i], floor = grid$`próg dolny [m]`[i], T = 33)
   grid$Odrzucone[i] <- sum(r$slow$accepted == 0)
@@ -1148,7 +1128,6 @@ Mediana prędkości na prawych kołach: `r round(v, 1)` m/s, więc przyspieszeni
 # Uruchomienie programu C++
 
 ```bash
-g++ -std=c++17 -O2 -Wall -Wextra skidpad_fusion.cpp -o build/skidpad
 ./build/skidpad data/DaneDoZadan/zad2/sensor1.csv data/DaneDoZadan/zad2/sensor2.csv
 ```
 

@@ -18,6 +18,7 @@ std::vector<Point> GreedyClusterer::run(const std::vector<Point>& points, double
     while (mergedAny) {
         mergedAny = false;
         std::vector<Point> nextPoints;
+        // Które łączymy
         std::vector<bool> merged(currentPoints.size(), false);
 
         for (size_t i = 0; i < currentPoints.size(); ++i) {
@@ -30,6 +31,7 @@ std::vector<Point> GreedyClusterer::run(const std::vector<Point>& points, double
 
                     double distSq = calculateDistanceSquared(current, currentPoints[j]);
 
+                    // Sprawdzamy odległość
                     if (distSq <= threshold * threshold) {
 
                         // Średnia ważona
@@ -57,7 +59,7 @@ std::vector<Point> GreedyClusterer::run(const std::vector<Point>& points, double
         currentPoints = nextPoints;
     }
 
-    // Maksymalne oryginalne ID w całym zbiorze wejściowym, żeby nowe ID zaczynały się od niego
+    // Przypisywanie ID
     int maxOriginalId = 0;
     for (const auto& pt : points) {
         for (int oid : pt.originalIds) {

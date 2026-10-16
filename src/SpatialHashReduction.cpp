@@ -4,17 +4,20 @@
 #include <unordered_map>
 #include <algorithm>
 
+// Struktura dla indeksów klastrów
 DisjointSet::DisjointSet(int n) {
     parent.resize(n);
     std::iota(parent.begin(), parent.end(), 0);
 }
 
+// Znajdywanie rodzica w klastrze
 int DisjointSet::find(int i) {
     if (parent[i] == i)
         return i;
     return parent[i] = find(parent[i]);
 }
 
+// Łączenie klastrów - przypisywanie nowych rodziców
 void DisjointSet::unite(int i, int j) {
     int root_i = find(i);
     int root_j = find(j);
@@ -27,6 +30,7 @@ void DisjointSet::unite(int i, int j) {
     std::vector<Point> SpatialHashReduction::reduce(const std::vector<Point>& points, double eps) {
         if (points.empty()) return {};
 
+        // Inicjalizacja oraz podział siatki na komórki
         int n = points.size();
         DisjointSet dsu(n);
         std::unordered_map<CellKey, std::vector<int>, CellHash> grid;
@@ -81,7 +85,7 @@ void DisjointSet::unite(int i, int j) {
             if (oid > maxOriginalId) maxOriginalId = oid;
         }
 
-        // 4. Obliczanie centroidów i przypisanie ID
+        // Obliczanie centroidów i przypisanie ID
         std::vector<Point> reducedPoints;
         int nextNewId = maxOriginalId + 1;
 

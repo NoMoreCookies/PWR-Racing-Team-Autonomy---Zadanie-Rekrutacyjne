@@ -2,12 +2,14 @@
 #include "Point.h"
 #include <algorithm>
 
+// Sortowanie punktów
 std::vector<Point> convexHull(std::vector<Point> points) {
     std::sort(points.begin(), points.end(), [](const Point& a, const Point& b) {
         if (a.x != b.x) return a.x < b.x;
         return a.y < b.y;
     });
 
+    // Usunięcie powtarzających się punktów
     points.erase(
         std::unique(points.begin(), points.end(), [](const Point& a, const Point& b) {
             return a.x == b.x && a.y == b.y;
@@ -19,6 +21,7 @@ std::vector<Point> convexHull(std::vector<Point> points) {
         return points;
     }
 
+    // Budowa dolnej części otoczki
     std::vector<Point> lower, upper;
 
     for (const Point& p : points) {
@@ -29,6 +32,7 @@ std::vector<Point> convexHull(std::vector<Point> points) {
         lower.push_back(p);
     }
 
+    // Budowa górnej części otoczki
     for (int i = static_cast<int>(points.size()) - 1; i >= 0; --i) {
         const Point& p = points[i];
         while (upper.size() >= 2 &&
