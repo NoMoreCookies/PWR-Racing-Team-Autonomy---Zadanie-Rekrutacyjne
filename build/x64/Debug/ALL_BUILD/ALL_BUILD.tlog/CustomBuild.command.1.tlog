@@ -1,0 +1,10 @@
+^C:\USERS\EGRAC\GITHUB\PWR-RACING-TEAM-AUTONOMY---ZADANIE-REKRUTACYJNE\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/egrac/github/PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne -BC:/Users/egrac/github/PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne/build --check-stamp-file C:/Users/egrac/github/PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

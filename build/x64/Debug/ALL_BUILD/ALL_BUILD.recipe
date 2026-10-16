@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>C:\Users\egrac\github\PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne\build\x64\Debug\ZERO_CHECK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\egrac\github\PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne\build\Debug\ex1_deduplication.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\egrac\github\PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne\build\Debug\zad2_sensors.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\egrac\github\PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne\build\x64\Debug\ALL_BUILD</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>

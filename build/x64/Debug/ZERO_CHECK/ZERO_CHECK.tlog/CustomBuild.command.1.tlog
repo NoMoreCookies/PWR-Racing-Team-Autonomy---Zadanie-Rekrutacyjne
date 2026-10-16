@@ -1,0 +1,10 @@
+^C:\USERS\EGRAC\GITHUB\PWR-RACING-TEAM-AUTONOMY---ZADANIE-REKRUTACYJNE\BUILD\CMAKEFILES\DF03126548422B49DFB646055B0ECDEB\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/egrac/github/PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne -BC:/Users/egrac/github/PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/egrac/github/PWR-Racing-Team-Autonomy---Zadanie-Rekrutacyjne/build/ex1_deduplication.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
