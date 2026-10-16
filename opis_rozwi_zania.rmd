@@ -1183,7 +1183,7 @@ $$\hat{p}(T) = p_f(T) + \hat{e}(T) = \begin{bmatrix} x_f(T) + \hat{e}_x(T) \\ y_
 
 ---
 
-#### 3. Uzasadnienie wyboru metody (Zalety inżynierskie)
+#### 3. Uzasadnienie wyboru metody
 
 1. **Komplementarność cech:** Architektura fuzji pozwala połączyć wysokie próbkowanie (45 Hz) oraz płynność czujnika gęstego z bezwzględną dokładnością i brakiem skumulowanego dryfu czujnika rzadkiego.
 2. **Filtracja w przestrzeni błędów (Error-State):** Filtrowanie bezpośrednio w przestrzeni pozycji uszkodziłoby ostrość zakrętów i zmniejszyło promieniej kół. Przejście do przestrzeni błędu ($e_i$) izoluje powolny trend dryfu od dynamiki pojazdu, co gwarantuje pełne zachowanie geometrii przejazdu.
