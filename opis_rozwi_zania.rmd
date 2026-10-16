@@ -1392,8 +1392,6 @@ Sample fusedAt(const Track& fast, const Track& corr, double T) {
 
 ### Problemy
 
-Największym napotkanym problemem w tym zadaniu stał się dla mnie brak wiedzy domenowej i niewystarczająca ilość czasu na jej uzupełnienie.
-O ile przekształćenia matematyczne rozumiem i jestem w stanie uzasadnić dlaczego owe zostały wykorzystane o tyle nie miałem czasu na walidację hipotez dotyczących pochodzenia błędów.
-
+Największym napotkanym problemem w tym zadaniu stał się dla mnie brak wiedzy domenowej i poświęcenie sporej ilości czasu na jej uzupełnianie, np. szukanie możliwych powodów błędnego działania sensorów.
 
 
